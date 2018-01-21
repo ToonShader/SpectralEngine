@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Utility.h"
+#include "Types.h"
 
 
 // High resolution timer
