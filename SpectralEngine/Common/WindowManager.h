@@ -7,7 +7,10 @@ class WindowManager
 {
 public:
 	WindowManager(HINSTANCE appInstance, const std::wstring& caption);
-	~WindowManager();
+	virtual ~WindowManager();
+
+	WindowManager(const WindowManager& copy) = delete;
+	WindowManager& operator=(const WindowManager& rhs) = delete;
 
 	// For now, a single method will be responsible for creating
 	// and presenting the window (to focus on more important things)
