@@ -16,24 +16,48 @@
     <Filter Include="Shaders">
       <UniqueIdentifier>{b2bcf984-a06a-4921-9177-93ea7775166a}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Core">
+    <Filter Include="TEMP">
+      <UniqueIdentifier>{082d6959-191c-4626-8929-8b1024788659}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Microsoft">
+      <UniqueIdentifier>{c7cb4db3-b82b-4735-9333-5817cdbf3999}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Graphics">
       <UniqueIdentifier>{000e3b44-4482-4b97-99dd-f4136d93dbb2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Common">
+      <UniqueIdentifier>{c9a35ea9-6b6e-4b66-8c49-d6f06884aab4}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Core\Timer.h">
-      <Filter>Core</Filter>
+    <ClInclude Include="Microsoft\d3dx12.h">
+      <Filter>Source Files\Microsoft</Filter>
     </ClInclude>
-    <ClInclude Include="Core\Utility.h">
-      <Filter>Core</Filter>
+    <ClInclude Include="Common\Timer.h">
+      <Filter>Source Files\Common</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\Types.h">
+      <Filter>Source Files\Common</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\WindowManager.h">
+      <Filter>Source Files\Common</Filter>
+    </ClInclude>
+    <ClInclude Include="Graphics\GraphicsCore.h">
+      <Filter>Source Files\Graphics</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="Core\Timer.cpp">
-      <Filter>Core</Filter>
-    </ClCompile>
     <ClCompile Include="Run.cpp">
       <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Common\Timer.cpp">
+      <Filter>Source Files\Common</Filter>
+    </ClCompile>
+    <ClCompile Include="Common\WindowManager.cpp">
+      <Filter>Source Files\Common</Filter>
+    </ClCompile>
+    <ClCompile Include="Graphics\GraphicsCore.cpp">
+      <Filter>Source Files\Graphics</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>
