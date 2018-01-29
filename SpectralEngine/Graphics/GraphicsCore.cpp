@@ -1,6 +1,6 @@
 #include "GraphicsCore.h"
-#include "../Common/Utility.h"
-#include "../Microsoft/d3dx12.h"
+#include "Common/Utility.h"
+#include "Microsoft/d3dx12.h"
 #include <DirectXMath.h>
 
 //#pragma comment(lib, "d3dcompiler.lib")
