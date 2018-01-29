@@ -1,5 +1,7 @@
 #include "GraphicsCore.h"
 #include "../Common/Utility.h"
+#include "../Microsoft/d3dx12.h"
+#include <DirectXMath.h>
 
 //#pragma comment(lib, "d3dcompiler.lib")
 #pragma comment(lib, "D3D12.lib")
@@ -7,6 +9,8 @@
 
 using namespace Spectral;
 using namespace Graphics;
+
+GraphicsCore* GraphicsCore::mGraphicsCore = nullptr;
 
 GraphicsCore::GraphicsCore()
 {
@@ -49,6 +53,128 @@ bool GraphicsCore::Initialize()
 	return true;
 }
 
+void GraphicsCore::ResizeWindow()
+{
+	assert(md3dDevice);
+	assert(mSwapChain);
+	assert(mDirectCmdListAlloc);
+
+	// Just in case any commands haven't executed yet
+	FlushCommandQueue();
+
+	ASSERT_HR(mCommandList->Reset(mDirectCmdListAlloc.Get(), nullptr));
+
+	// Release the back and depth/stencil buffers
+	for (int i = 0; i < SWAP_CHAIN_BUFFER_COUNT; ++i)
+		mSwapChainBuffer[i].Reset();
+	mDepthStencilBuffer.Reset();
+
+	ASSERT_HR(mSwapChain->ResizeBuffers(
+		SWAP_CHAIN_BUFFER_COUNT,
+		mClientWidth, mClientHeight,
+		mBackBufferFormat,
+		DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH));
+
+	mCurrBackBuffer = 0;
+
+	CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHeapHandle(mRtvHeap->GetCPUDescriptorHandleForHeapStart());
+	for (UINT i = 0; i < SWAP_CHAIN_BUFFER_COUNT; i++)
+	{
+		ASSERT_HR(mSwapChain->GetBuffer(i, IID_PPV_ARGS(&mSwapChainBuffer[i])));
+		md3dDevice->CreateRenderTargetView(mSwapChainBuffer[i].Get(), nullptr, rtvHeapHandle);
+		rtvHeapHandle.Offset(1, mRtvDescriptorSize);
+	}
+
+	// Recreate depth/stencil buffer and view.
+	D3D12_RESOURCE_DESC depthStencilDesc;
+	depthStencilDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+	depthStencilDesc.Alignment = 0;
+	depthStencilDesc.Width = mClientWidth;
+	depthStencilDesc.Height = mClientHeight;
+	depthStencilDesc.DepthOrArraySize = 1;
+	depthStencilDesc.MipLevels = 1;
+	depthStencilDesc.Format = mDepthStencilFormat;
+	depthStencilDesc.SampleDesc.Count = 1;// m4xMsaaState ? 4 : 1;
+	depthStencilDesc.SampleDesc.Quality = 0;// m4xMsaaState ? (m4xMsaaQuality - 1) : 0;
+	depthStencilDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+	depthStencilDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+
+	D3D12_CLEAR_VALUE optClear;
+	optClear.Format = mDepthStencilFormat;
+	optClear.DepthStencil.Depth = 1.0f;
+	optClear.DepthStencil.Stencil = 0;
+	ASSERT_HR(md3dDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+		D3D12_HEAP_FLAG_NONE, &depthStencilDesc, D3D12_RESOURCE_STATE_COMMON, &optClear,
+		IID_PPV_ARGS(mDepthStencilBuffer.GetAddressOf())));
+
+	// Create descriptor to mip level 0 of entire resource using the format of the resource.
+	md3dDevice->CreateDepthStencilView(mDepthStencilBuffer.Get(), nullptr, mDsvHeap->GetCPUDescriptorHandleForHeapStart());
+
+	// Transition the resource from its initial state to be used as a depth buffer.
+	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mDepthStencilBuffer.Get(),
+		D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_DEPTH_WRITE));
+
+	ASSERT_HR(mCommandList->Close());
+	ID3D12CommandList* cmdsLists[] = { mCommandList.Get() };
+	mCommandQueue->ExecuteCommandLists(_countof(cmdsLists), cmdsLists);
+	FlushCommandQueue();
+
+	// Update the viewport transform to cover the client area.
+	mScreenViewport.TopLeftX = 0;
+	mScreenViewport.TopLeftY = 0;
+	mScreenViewport.Width = static_cast<float>(mClientWidth/2);
+	mScreenViewport.Height = static_cast<float>(mClientHeight/2);
+	mScreenViewport.MinDepth = 0.0f;
+	mScreenViewport.MaxDepth = 1.0f;
+
+	mScissorRect = { 0, 0, mClientWidth/2, mClientHeight/2 };
+}
+
+void GraphicsCore::RenderPrePass()
+{
+	// Temporary implementation for D3D12 initialization verification
+	ASSERT_HR(mDirectCmdListAlloc->Reset());
+	ASSERT_HR(mCommandList->Reset(mDirectCmdListAlloc.Get(), nullptr/*mPSO.Get()*/));
+
+	// Transition from present state to render target
+	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mSwapChainBuffer[mCurrBackBuffer].Get(),
+		D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
+
+	mCommandList->RSSetViewports(1, &mScreenViewport);
+	mCommandList->RSSetScissorRects(1, &mScissorRect);
+
+	DirectX::XMVECTORF32 color = { 0.690196097f, 0.768627524f, 0.870588303f, 1.000000000f };
+	mCommandList->ClearRenderTargetView(CD3DX12_CPU_DESCRIPTOR_HANDLE(
+		mRtvHeap->GetCPUDescriptorHandleForHeapStart(),
+		mCurrBackBuffer,
+		mRtvDescriptorSize), color, 0, nullptr);
+	mCommandList->ClearDepthStencilView(mDsvHeap->GetCPUDescriptorHandleForHeapStart(),
+		D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
+
+	mCommandList->OMSetRenderTargets(1, &CD3DX12_CPU_DESCRIPTOR_HANDLE(
+		mRtvHeap->GetCPUDescriptorHandleForHeapStart(),
+		mCurrBackBuffer,
+		mRtvDescriptorSize), true, &mDsvHeap->GetCPUDescriptorHandleForHeapStart());
+
+	// Transition from render target to present state
+	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mSwapChainBuffer[mCurrBackBuffer].Get(),
+		D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
+
+
+	// Done recording commands.
+	ASSERT_HR(mCommandList->Close());
+
+	// Add the command list to the queue for execution.
+	ID3D12CommandList* cmdsLists[] = { mCommandList.Get() };
+	mCommandQueue->ExecuteCommandLists(_countof(cmdsLists), cmdsLists);
+
+	// swap the back and front buffers
+	ASSERT_HR(mSwapChain->Present(0, 0));
+	mCurrBackBuffer = (mCurrBackBuffer + 1) % SWAP_CHAIN_BUFFER_COUNT;
+
+	FlushCommandQueue();
+}
+
 bool GraphicsCore::InitDirect3D()
 {
 	#if defined(DEBUG) || defined(_DEBUG) 
@@ -63,11 +189,16 @@ bool GraphicsCore::InitDirect3D()
 	ASSERT_HR(CreateDXGIFactory2(0, IID_PPV_ARGS(&mdxgiFactory)));
 
 	// Create hardware device for default adapter with feature level 12
-	ASSERT_HR(D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_12_0, IID_PPV_ARGS(&md3dDevice)));
+	HRESULT hr = D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_12_0, IID_PPV_ARGS(&md3dDevice));
+	if (FAILED(hr))
+	{
+		// Fallback to warp device if default
+		// doesn't support the D3D12 runtime
+		Microsoft::WRL::ComPtr<IDXGIAdapter1> pAdapter;
+		ASSERT_HR(mdxgiFactory->EnumWarpAdapter(IID_PPV_ARGS(&pAdapter)));
+		ASSERT_HR(D3D12CreateDevice(pAdapter.Get(), D3D_FEATURE_LEVEL_12_0, IID_PPV_ARGS(&md3dDevice)));
+	}
 
-	// ========================================
-	// UNIMPLEMENTED: Fallback to WARP device.
-	// ========================================
 
 #pragma region DORMANT_CODE
 #pragma region MINI_ENGINE
@@ -190,13 +321,13 @@ void GraphicsCore::CreateSwapChain()
 	// Release it if it exists (function may be called periodically)
 	mSwapChain.Reset();
 
-	DXGI_SWAP_CHAIN_DESC1 scDesc;
+	DXGI_SWAP_CHAIN_DESC1 scDesc = {};
 	scDesc.Width = mClientWidth;
 	scDesc.Height = mClientHeight;
 	scDesc.Format = mBackBufferFormat;
 	scDesc.Scaling = DXGI_SCALING_NONE;
-	scDesc.SampleDesc.Count = 0; //m4xMsaaState ? 4 : 1;
-	scDesc.SampleDesc.Quality = 1; //m4xMsaaState ? (m4xMsaaQuality - 1) : 0;
+	scDesc.SampleDesc.Count = 1; //m4xMsaaState ? 4 : 1;
+	scDesc.SampleDesc.Quality = 0; //m4xMsaaState ? (m4xMsaaQuality - 1) : 0;
 	scDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 	scDesc.BufferCount = SWAP_CHAIN_BUFFER_COUNT;
 	scDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;

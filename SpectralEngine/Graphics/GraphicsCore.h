@@ -23,7 +23,7 @@ namespace Spectral
 		class GraphicsCore
 		{
 		protected:
-			// For now, this class is a singleton unless I find a better
+			// For now, this class is a singleton until I work on a better
 			// way to manage core D3D control with concurrent threads.
 			GraphicsCore();
 			/*virtual */~GraphicsCore();
@@ -37,7 +37,8 @@ namespace Spectral
 			// Potential Feature: Support runtime switching of render window
 
 			// /*virtual*/ LRESULT MsgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
-
+			/*virtual*/ void RenderPrePass(/*const Timer& gt*/); /*= 0;*/
+			/*virtual*/ void Render(/*const Timer& gt*/); /*= 0;*/
 			// TODO: Accessors for settings screen states
 
 		private:
@@ -57,8 +58,7 @@ namespace Spectral
 		private:
 			/*virtual*/ void ResizeWindow();
 			// /*virtual*/ void Update(const Timer& gt); /*= 0;*/
-			/*virtual*/ void RenderPrePass(/*const Timer& gt*/); /*= 0;*/
-			/*virtual*/ void Render(/*const Timer& gt*/); /*= 0;*/
+			
 
 		//protected:
 		private:
@@ -69,15 +69,9 @@ namespace Spectral
 
 			void FlushCommandQueue();
 
-			ID3D12Resource* CurrentBackBuffer()const;
-			D3D12_CPU_DESCRIPTOR_HANDLE CurrentBackBufferView()const;
-			D3D12_CPU_DESCRIPTOR_HANDLE DepthStencilView()const;
-
-			void CalculateFrameStats();
-
-			//void LogAdapters();
-			//void LogAdapterOutputs(IDXGIAdapter* adapter);
-			//void LogOutputDisplayModes(IDXGIOutput* output, DXGI_FORMAT format);
+			//ID3D12Resource* CurrentBackBuffer()const;
+			//D3D12_CPU_DESCRIPTOR_HANDLE CurrentBackBufferView()const;
+			//D3D12_CPU_DESCRIPTOR_HANDLE DepthStencilView()const;
 
 		//protected:
 		private:
@@ -91,11 +85,10 @@ namespace Spectral
 			bool      mFullscreen = false;
 			//bool      mResizing = false;   // Current goal is to make resizing fluid
 			
-
+			// UNIMPLEMENTED: AA support
 			//bool      m4xMsaaState = false;
 			//UINT      m4xMsaaQuality = 0;
-
-			//Timer mTimer;
+			
 
 			Microsoft::WRL::ComPtr<IDXGIFactory4> mdxgiFactory;
 			Microsoft::WRL::ComPtr<IDXGISwapChain1> mSwapChain;
