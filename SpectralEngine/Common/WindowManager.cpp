@@ -35,7 +35,7 @@ bool WindowManager::InitWindow(int width, int height, WNDPROC wndProc)
 	assert(RegisterClassEx(&wcex) != 0);
 
 	// Create window
-	RECT rect = { 0, 0, mWindowWidth, mWindowWidth };
+	RECT rect = { 0, 0, mWindowWidth, mWindowHeight };
 	AdjustWindowRect(&rect, WS_OVERLAPPEDWINDOW, false);
 
 	mhMainWindow = CreateWindow(mWindowCaption.c_str(), mWindowCaption.c_str(), WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT,
