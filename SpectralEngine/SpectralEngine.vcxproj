@@ -21,6 +21,7 @@
   <ItemGroup>
     <ClInclude Include="Common\Timer.h" />
     <ClInclude Include="Common\Types.h" />
+    <ClInclude Include="Common\Utility.h" />
     <ClInclude Include="Common\WindowManager.h" />
     <ClInclude Include="Graphics\GraphicsCore.h" />
     <ClInclude Include="Microsoft\d3dx12.h" />
