@@ -5,10 +5,13 @@
 
 #include "Mesh.h"
 
-class RenderPacket
+extern const int gNumFrameResources;
+
+struct RenderPacket
 {
-	// Index into GPU constant buffer this packet is written into
-	UINT ObjCBIndex = -1;
+	// Not currently used as I don't like the dependencies it creates.
+	// Index into GPU constant buffer this packet is written into.
+	//UINT ObjCBIndex = -1;
 
 	DirectX::XMFLOAT4X4 World = Spectral::Math::XMF4x4Identity();
 
