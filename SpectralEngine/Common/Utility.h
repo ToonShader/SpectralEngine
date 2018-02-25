@@ -18,12 +18,12 @@ if (!static_cast<bool>(exp))		\
     __debugbreak();					\
 }
 
-#define ASSERT_HR(hr, outstr)		\
+#define ASSERT_HR(hr/*, outstr*/)		\
 if (FAILED(hr))						\
 {									\
     OutputDebugString(L"\nHRESULT failed in " L2_PT(__FILE__) " @ " L2_PT(__LINE__) "\n"); \
     OutputDebugString(L"HRESULT = " #hr "\n"); \
-	OutputDebugString(outstr L"\n");	\
+	/*OutputDebugString(outstr L"\n");*/	\
     __debugbreak();					\
 }
 
