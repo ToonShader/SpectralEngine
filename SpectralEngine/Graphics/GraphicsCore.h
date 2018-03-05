@@ -80,6 +80,9 @@ namespace Spectral
 			// IMPROVEMENT: Eventually command entities will be abstracted to a manager class
 			void CreateCommandEntities();
 			void CreateSwapChain();
+			void BuildRootSignature();
+			void BuildShadersAndInputLayout();
+			void BuildDescriptorHeaps();
 			void BuildConstantBufferViews();
 			void BuildPSOs();
 			void BuildFrameResources();
@@ -87,11 +90,12 @@ namespace Spectral
 			void DrawRenderItems(ID3D12GraphicsCommandList* cmdList, ID3D12CommandAllocator* listAlloc, const std::vector<RenderPacket*>& ritems);
 
 			void UpdateObjectCBs(const std::vector<RenderPacket*>& packets, int startIndex, int numToUpdate);
+			void UpdateMaterialCBs(const std::vector<RenderPacket*>& packets, int startIndex, int numToUpdate);
 			void UpdateMainPassCB();
 
-			void BuildDescriptorHeaps();
-			void BuildRootSignature();
-			void BuildShadersAndInputLayout();
+
+
+
 
 			ID3D12Resource* CurrentBackBuffer()const;
 			D3D12_CPU_DESCRIPTOR_HANDLE CurrentBackBufferView()const;
@@ -154,7 +158,7 @@ namespace Spectral
 
 			UINT mPassCbvOffset = 0;
 
-			bool mIsWireframe = true;
+			bool mIsWireframe = false;
 
 			// Temporary placement for camera parameters.
 			// TODO: Factor out and take camera as drawing argument.

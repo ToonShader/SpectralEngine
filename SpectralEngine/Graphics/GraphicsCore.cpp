@@ -1,4 +1,5 @@
 #include "GraphicsCore.h"
+#include "Material.h"
 #include "Common/Utility.h"
 #include "Microsoft/d3dx12.h"
 #include <Math.h>
@@ -292,7 +293,7 @@ void Spectral::Graphics::GraphicsCore::testrender()
 	int passCbvIndex = mPassCbvOffset + 0; // mCurrFrameResourceIndex;
 	auto passCbvHandle = CD3DX12_GPU_DESCRIPTOR_HANDLE(mCbvHeap->GetGPUDescriptorHandleForHeapStart());
 	passCbvHandle.Offset(passCbvIndex, mCbvSrvUavDescriptorSize);
-	mCommandList->SetGraphicsRootDescriptorTable(1, passCbvHandle);
+	mCommandList->SetGraphicsRootDescriptorTable(0, passCbvHandle);
 
 	DrawRenderItems(mCommandList.Get(), cmdListAlloc.Get(), mOpaqueRenderPackets);
 
@@ -526,14 +527,43 @@ void Spectral::Graphics::GraphicsCore::UpdateObjectCBs(const std::vector<RenderP
 		//if (e->NumFramesDirty > 0)
 		//{
 			XMMATRIX world = XMLoadFloat4x4(&(packets[i]->World));
+			//XMMATRIX texTransform = XMLoadFloat4x4(&e->TexTransform);
 
 			ObjectConstants objConstants;
 			DirectX::XMStoreFloat4x4(&objConstants.World, XMMatrixTranspose(world));
+			//XMStoreFloat4x4(&objConstants.TexTransform, XMMatrixTranspose(texTransform));
 
 			currObjectCB->CopyData(cbIndex, objConstants);
 
 			// One down, more to go?
 			//e->NumFramesDirty--;
+		//}
+	}
+}
+
+void Spectral::Graphics::GraphicsCore::UpdateMaterialCBs(const std::vector<RenderPacket*>& packets, int startIndex, int numToUpdate)
+{
+	assert(numToUpdate <= NUM_CBUFFERS);
+	auto currMaterialCB = mCurrFrameResource->MaterialCB.get();
+
+	// TODO: Insert checks/parameters for number of descriptors held by a CB.
+	int endIndex = startIndex + numToUpdate < packets.size() ? startIndex + numToUpdate : packets.size();
+	for (int i = startIndex, cbIndex = 0; i < endIndex; ++i, ++cbIndex)
+	{
+		const Material* mat = packets[i]->Mat;
+		//if (mat->NumFramesDirty > 0)
+		//{
+			XMMATRIX matTransform = XMLoadFloat4x4(&mat->MatTransform);
+
+			MaterialConstants matConstants;
+			matConstants.DiffuseAlbedo = mat->DiffuseAlbedo;
+			matConstants.FresnelR0 = mat->FresnelR0;
+			matConstants.Roughness = mat->Roughness;
+			XMStoreFloat4x4(&matConstants.MatTransform, XMMatrixTranspose(matTransform));
+
+			currMaterialCB->CopyData(cbIndex, matConstants);
+
+			//mat->NumFramesDirty--;
 		//}
 	}
 }
@@ -564,6 +594,21 @@ void Spectral::Graphics::GraphicsCore::UpdateMainPassCB()
 	mMainPassCB.TotalTime = 1;// gt.TotalTime(); //TODO: If this stays, need to have time access
 	mMainPassCB.DeltaTime = 1;// gt.DeltaTime();
 
+	// mMainPassCB.AmbientLight = { 0.25f, 0.25f, 0.35f, 1.0f };
+	mMainPassCB.Lights[0].Direction = { 0.57735f, -0.57735f, 0.57735f };
+	mMainPassCB.Lights[0].Strength = { 0.6f, 0.6f, 0.6f };
+	mMainPassCB.Lights[1].Direction = { -0.57735f, -0.57735f, 0.57735f };
+	mMainPassCB.Lights[1].Strength = { 0.3f, 0.3f, 0.3f };
+	mMainPassCB.Lights[2].Direction = { 0.0f, -0.707f, -0.707f };
+	mMainPassCB.Lights[2].Strength = { 0.15f, 0.15f, 0.15f };
+
+	//mMainPassCB.Lights[0].Position = { 5.57735f, 5.57735f, 5.57735f };
+	//mMainPassCB.Lights[0].Strength = { 0.8f, 0.8f, 0.8f };
+	//mMainPassCB.Lights[1].Position = { 0.0f, 5.57735f, 0.57735f };
+	//mMainPassCB.Lights[1].Strength = { 0.5f, 0.5f, 0.5f };
+	//mMainPassCB.Lights[2].Position = { 5.0f, 5.707f, 5.707f };
+	//mMainPassCB.Lights[2].Strength = { 0.15f, 0.15f, 0.15f };
+
 	auto currPassCB = mCurrFrameResource->PassCB.get();
 	currPassCB->CopyData(0, mMainPassCB);
 }
@@ -574,55 +619,30 @@ void Spectral::Graphics::GraphicsCore::BuildDescriptorHeaps()
 	// but for now the number of buffers is fixed.
 	UINT bufferCount = NUM_CBUFFERS;
 
-	// Need a CBV descriptor for each object for each frame resource,
-	// +1 for the perPass CBV for each frame resource.
-	UINT numDescriptors = (bufferCount + 1) * gNumFrameResources;
+	// Need 2 CBV descriptors for each object for each frame resource,
+	// +1 for the perPass CBV for each frame resource. The per object
+	// descriptors are for the material and object CBs respectively.
+	// HEAP: [PassConstants][MaterialConstants][ObjectConstants]
+	UINT numDescriptors = ((bufferCount * 2) + 1) * gNumFrameResources;
 
 	// Save an offset to the start of the pass CBVs.  These are the last 3 descriptors.
-	mPassCbvOffset = bufferCount * gNumFrameResources;
+	mPassCbvOffset = 0; // bufferCount * gNumFrameResources;
 
 	D3D12_DESCRIPTOR_HEAP_DESC cbvHeapDesc;
 	cbvHeapDesc.NumDescriptors = numDescriptors;
 	cbvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 	cbvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 	cbvHeapDesc.NodeMask = 0;
-	ASSERT_HR(md3dDevice->CreateDescriptorHeap(&cbvHeapDesc,
-		IID_PPV_ARGS(&mCbvHeap)));
+	ASSERT_HR(md3dDevice->CreateDescriptorHeap(&cbvHeapDesc, IID_PPV_ARGS(&mCbvHeap)));
 }
 
 void Spectral::Graphics::GraphicsCore::BuildConstantBufferViews()
 {
-	UINT objCBByteSize = CalcConstantBufferByteSize(sizeof(ObjectConstants));
-
 	UINT objCount = NUM_CBUFFERS;
-
-	// Need a CBV descriptor for each object for each frame resource.
-	//for (int frameIndex = 0; frameIndex < gNumFrameResources; ++frameIndex)
-	//{
-		auto objectCB = mCurrFrameResource->ObjectCB->Resource();
-		for (UINT i = 0; i < objCount; ++i)
-		{
-			D3D12_GPU_VIRTUAL_ADDRESS cbAddress = objectCB->GetGPUVirtualAddress();
-
-			// Offset to the ith object constant buffer in the buffer.
-			cbAddress += i*objCBByteSize;
-
-			// Offset to the object cbv in the descriptor heap.
-			int heapIndex = /*frameIndex*/0*objCount + i;
-			auto handle = CD3DX12_CPU_DESCRIPTOR_HANDLE(mCbvHeap->GetCPUDescriptorHandleForHeapStart());
-			handle.Offset(heapIndex, mCbvSrvUavDescriptorSize);
-
-			D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc;
-			cbvDesc.BufferLocation = cbAddress;
-			cbvDesc.SizeInBytes = objCBByteSize;
-
-			md3dDevice->CreateConstantBufferView(&cbvDesc, handle);
-		}
-	//}
 
 	UINT passCBByteSize = CalcConstantBufferByteSize(sizeof(PassConstants));
 
-	// Last three descriptors are the pass CBVs for each frame resource.
+	// First set of descriptors are the pass CBVs for each frame resource.
 	//for (int frameIndex = 0; frameIndex < gNumFrameResources; ++frameIndex)
 	//{
 		auto passCB = mCurrFrameResource->PassCB->Resource();
@@ -638,6 +658,58 @@ void Spectral::Graphics::GraphicsCore::BuildConstantBufferViews()
 		cbvDesc.SizeInBytes = passCBByteSize;
 
 		md3dDevice->CreateConstantBufferView(&cbvDesc, handle);
+	//}
+
+	UINT matCBByteSize = CalcConstantBufferByteSize(sizeof(MaterialConstants));
+
+		// Need a CBV descriptor for each object for each frame resource.
+		//for (int frameIndex = 0; frameIndex < gNumFrameResources; ++frameIndex)
+		//{
+		auto matCB = mCurrFrameResource->MaterialCB->Resource();
+		for (UINT i = 0; i < objCount; ++i)
+		{
+			D3D12_GPU_VIRTUAL_ADDRESS cbAddress = matCB->GetGPUVirtualAddress();
+
+			// Offset to the ith object constant buffer in the buffer.
+			cbAddress += i * matCBByteSize;
+
+			// Offset to the object cbv in the descriptor heap.
+			int heapIndex = /*frameIndex*/(0 * objCount) + i + gNumFrameResources;
+			auto handle = CD3DX12_CPU_DESCRIPTOR_HANDLE(mCbvHeap->GetCPUDescriptorHandleForHeapStart());
+			handle.Offset(heapIndex, mCbvSrvUavDescriptorSize);
+
+			D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc;
+			cbvDesc.BufferLocation = cbAddress;
+			cbvDesc.SizeInBytes = matCBByteSize;
+
+			md3dDevice->CreateConstantBufferView(&cbvDesc, handle);
+		}
+		//}
+
+	UINT objCBByteSize = CalcConstantBufferByteSize(sizeof(ObjectConstants));
+
+	// Need a CBV descriptor for each object for each frame resource.
+	//for (int frameIndex = 0; frameIndex < gNumFrameResources; ++frameIndex)
+	//{
+		auto objectCB = mCurrFrameResource->ObjectCB->Resource();
+		for (UINT i = 0; i < objCount; ++i)
+		{
+			D3D12_GPU_VIRTUAL_ADDRESS cbAddress = objectCB->GetGPUVirtualAddress();
+
+			// Offset to the ith object constant buffer in the buffer.
+			cbAddress += i*objCBByteSize;
+
+			// Offset to the object cbv in the descriptor heap.
+			int heapIndex = /*frameIndex*/ objCount + i + gNumFrameResources;
+			auto handle = CD3DX12_CPU_DESCRIPTOR_HANDLE(mCbvHeap->GetCPUDescriptorHandleForHeapStart());
+			handle.Offset(heapIndex, mCbvSrvUavDescriptorSize);
+
+			D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc;
+			cbvDesc.BufferLocation = cbAddress;
+			cbvDesc.SizeInBytes = objCBByteSize;
+
+			md3dDevice->CreateConstantBufferView(&cbvDesc, handle);
+		}
 	//}
 }
 
@@ -711,6 +783,7 @@ void Spectral::Graphics::GraphicsCore::DrawRenderItems(ID3D12GraphicsCommandList
 
 			FlushCommandQueue();
 			UpdateObjectCBs(ritems, i, NUM_CBUFFERS);
+			UpdateMaterialCBs(ritems, i, NUM_CBUFFERS);
 			ASSERT_HR(listAlloc->Reset()); // Optional, if we don't wan't the memory back
 
 			// A command list can be reset after it has been added to the command queue via ExecuteCommandList.
@@ -721,7 +794,7 @@ void Spectral::Graphics::GraphicsCore::DrawRenderItems(ID3D12GraphicsCommandList
 			}
 			else
 			{
-				ASSERT_HR(mCommandList->Reset(listAlloc, mPSOs["opaque"].Get()));
+				ASSERT_HR(cmdList->Reset(listAlloc, mPSOs["opaque"].Get()));
 			}
 
 			cmdList->RSSetViewports(1, &mScreenViewport);
@@ -738,7 +811,7 @@ void Spectral::Graphics::GraphicsCore::DrawRenderItems(ID3D12GraphicsCommandList
 			int passCbvIndex = mPassCbvOffset + 0; // mCurrFrameResourceIndex;
 			auto passCbvHandle = CD3DX12_GPU_DESCRIPTOR_HANDLE(mCbvHeap->GetGPUDescriptorHandleForHeapStart());
 			passCbvHandle.Offset(passCbvIndex, mCbvSrvUavDescriptorSize);
-			cmdList->SetGraphicsRootDescriptorTable(1, passCbvHandle);
+			cmdList->SetGraphicsRootDescriptorTable(0, passCbvHandle);
 
 			// We can now specify all of the drawing related commands.
 		}
@@ -748,12 +821,19 @@ void Spectral::Graphics::GraphicsCore::DrawRenderItems(ID3D12GraphicsCommandList
 		cmdList->IASetIndexBuffer(&ri->Geo->IndexBufferView());
 		cmdList->IASetPrimitiveTopology(ri->PrimitiveType);
 
-		// Offset to the CBV in the descriptor heap for this object and for this frame resource.
-		UINT cbvIndex = /*mCurrFrameResourceIndex*//*0*(UINT)mOpaqueRenderPackets.size() + */(i % NUM_CBUFFERS);
+		// Offset to the CBV in the descriptor heap for this object's material and for this frame resource.
+		UINT cbvIndex = /*mCurrFrameResourceIndex*//*0*(UINT)mOpaqueRenderPackets.size() + */(i % NUM_CBUFFERS) + gNumFrameResources;
 		auto cbvHandle = CD3DX12_GPU_DESCRIPTOR_HANDLE(mCbvHeap->GetGPUDescriptorHandleForHeapStart());
 		cbvHandle.Offset(cbvIndex, mCbvSrvUavDescriptorSize);
 
-		cmdList->SetGraphicsRootDescriptorTable(0, cbvHandle);
+		cmdList->SetGraphicsRootDescriptorTable(1, cbvHandle);
+
+		// Offset to the CBV in the descriptor heap for this object and for this frame resource.
+		cbvIndex = /*mCurrFrameResourceIndex*//*0*(UINT)mOpaqueRenderPackets.size() + */(i % NUM_CBUFFERS) + NUM_CBUFFERS + gNumFrameResources;
+		cbvHandle = CD3DX12_GPU_DESCRIPTOR_HANDLE(mCbvHeap->GetGPUDescriptorHandleForHeapStart());
+		cbvHandle.Offset(cbvIndex, mCbvSrvUavDescriptorSize);
+
+		cmdList->SetGraphicsRootDescriptorTable(2, cbvHandle);
 
 		cmdList->DrawIndexedInstanced(ri->IndexCount, 1, ri->StartIndexLocation, ri->BaseVertexLocation, 0);
 	}
@@ -769,15 +849,19 @@ void Spectral::Graphics::GraphicsCore::BuildRootSignature()
 	CD3DX12_DESCRIPTOR_RANGE cbvTable1;
 	cbvTable1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 1);
 
+	CD3DX12_DESCRIPTOR_RANGE cbvTable2;
+	cbvTable2.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 2);
+
 	// Root parameter can be a table, root descriptor or root constants.
-	CD3DX12_ROOT_PARAMETER slotRootParameter[2];
+	CD3DX12_ROOT_PARAMETER slotRootParameter[3];
 
 	// Create root CBVs.
-	slotRootParameter[0].InitAsDescriptorTable(1, &cbvTable0);
-	slotRootParameter[1].InitAsDescriptorTable(1, &cbvTable1);
+	slotRootParameter[0].InitAsDescriptorTable(1, &cbvTable0); // PassCB
+	slotRootParameter[1].InitAsDescriptorTable(1, &cbvTable1); // MatCB
+	slotRootParameter[2].InitAsDescriptorTable(1, &cbvTable2); // ObjCB
 
 	// A root signature is an array of root parameters.
-	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(2, slotRootParameter, 0, nullptr,
+	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(3, slotRootParameter, 0, nullptr,
 		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
 	// create a root signature with a single slot which points to a descriptor range consisting of a single constant buffer
@@ -798,13 +882,14 @@ void Spectral::Graphics::GraphicsCore::BuildRootSignature()
 
 void Spectral::Graphics::GraphicsCore::BuildShadersAndInputLayout()
 {
-	mShaders["standardVS"] = CompileShader(L"TEMP\\Shapes\\color.hlsl", nullptr, "VS", "vs_5_1");
-	mShaders["opaquePS"] = CompileShader(L"TEMP\\Shapes\\color.hlsl", nullptr, "PS", "ps_5_1");
+	mShaders["standardVS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "VS", "vs_5_1");
+	mShaders["opaquePS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "PS", "ps_5_1");
 
 	mInputLayout =
 	{
 		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-		{ "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+		{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
+		//{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 24, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
 	};
 }
 

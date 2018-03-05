@@ -4,6 +4,7 @@
 #include "Common\Math.h"
 
 #include "Mesh.h"
+#include "Material.h"
 
 extern const int gNumFrameResources;
 
@@ -14,7 +15,9 @@ struct RenderPacket
 	//UINT ObjCBIndex = -1;
 
 	DirectX::XMFLOAT4X4 World = Spectral::Math::XMF4x4Identity();
+	XMFLOAT4X4 TexTransform = Spectral::Math::XMF4x4Identity();
 
+	Material* Mat = nullptr;
 	Mesh* Geo = nullptr;
 
 	// Info to index into mesh for drawing

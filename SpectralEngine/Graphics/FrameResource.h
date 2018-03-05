@@ -10,6 +10,7 @@
 #include <memory>
 
 #include "Common/Math.h"
+#include "Lighting.h"
 
 
 template<typename T>
@@ -76,6 +77,18 @@ struct ObjectConstants
 	DirectX::XMFLOAT4X4 World = Spectral::Math::XMF4x4Identity();
 };
 
+struct MaterialConstants
+{
+	DirectX::XMFLOAT4 AmbientAlbedo = { 0.25f, 0.25f, 0.35f, 1.0f }; //{ 0.5f, 0.5f, 0.5f, 0.5f };
+	DirectX::XMFLOAT4 DiffuseAlbedo = { 1.0f, 1.0f, 1.0f, 1.0f };
+	DirectX::XMFLOAT3 FresnelR0 = { 0.01f, 0.01f, 0.01f };
+	float Roughness = 0.25f;
+
+	// Optional matrix to transform texture coordinates
+	DirectX::XMFLOAT4X4 MatTransform = Spectral::Math::XMF4x4Identity();
+};
+
+#define MaxLights 16
 struct PassConstants
 {
 	DirectX::XMFLOAT4X4 View = Spectral::Math::XMF4x4Identity();
@@ -92,12 +105,14 @@ struct PassConstants
 	float FarZ = 0.0f;
 	float TotalTime = 0.0f;
 	float DeltaTime = 0.0f;
+
+	Light Lights[MaxLights];
 };
 
 struct Vertex
 {
-	DirectX::XMFLOAT3 Pos;
-	DirectX::XMFLOAT4 Color;
+	DirectX::XMFLOAT3 Position;
+	DirectX::XMFLOAT3 Normal;
 };
 
  
@@ -113,6 +128,7 @@ public:
 	Microsoft::WRL::ComPtr<ID3D12CommandAllocator> CmdListAlloc;
 
 	std::unique_ptr<UploadBuffer<PassConstants>> PassCB = nullptr;
+	std::unique_ptr<UploadBuffer<MaterialConstants>> MaterialCB = nullptr;
 	std::unique_ptr<UploadBuffer<ObjectConstants>> ObjectCB = nullptr;
 
 	UINT64 Fence = 0;
