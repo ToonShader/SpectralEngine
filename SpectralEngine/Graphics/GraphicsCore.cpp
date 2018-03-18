@@ -2,6 +2,7 @@
 #include "Material.h"
 #include "Common/Utility.h"
 #include "Microsoft/d3dx12.h"
+#include "Microsoft/DDSTextureLoader.h"
 #include <Math.h>
 #include <DirectXColors.h>
 #include <d3dcompiler.h>
@@ -221,7 +222,7 @@ void Spectral::Graphics::GraphicsCore::testrender()
 	XMMATRIX P = XMMatrixPerspectiveFovLH(0.25f * XM_PI, static_cast<float>(mClientWidth) / mClientHeight, 1.0f, 1000.0f);
 	DirectX::XMStoreFloat4x4(&mProj, P);
 	// Convert Spherical to Cartesian coordinates.
-	mTheta += 0.015;
+	mTheta += 0.115;
 	mEyePos.x = mRadius*sinf(mPhi)*cosf(mTheta);
 	mEyePos.z = mRadius*sinf(mPhi)*sinf(mTheta);
 	mEyePos.y = mRadius*cosf(mPhi);
@@ -285,15 +286,15 @@ void Spectral::Graphics::GraphicsCore::testrender()
 	// Specify the buffers we are going to render to.
 	mCommandList->OMSetRenderTargets(1, &CurrentBackBufferView(), true, &DepthStencilView());
 
-	ID3D12DescriptorHeap* descriptorHeaps[] = { mCbvHeap.Get() };
-	mCommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
+	//ID3D12DescriptorHeap* descriptorHeaps[] = { mCbvHeap.Get() };
+	//mCommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
 
-	mCommandList->SetGraphicsRootSignature(mRootSignature.Get());
+	//mCommandList->SetGraphicsRootSignature(mRootSignature.Get());
 
-	int passCbvIndex = mPassCbvOffset + 0; // mCurrFrameResourceIndex;
-	auto passCbvHandle = CD3DX12_GPU_DESCRIPTOR_HANDLE(mCbvHeap->GetGPUDescriptorHandleForHeapStart());
-	passCbvHandle.Offset(passCbvIndex, mCbvSrvUavDescriptorSize);
-	mCommandList->SetGraphicsRootDescriptorTable(0, passCbvHandle);
+	//int passCbvIndex = mPassCbvOffset + 0; // mCurrFrameResourceIndex;
+	//auto passCbvHandle = CD3DX12_GPU_DESCRIPTOR_HANDLE(mCbvHeap->GetGPUDescriptorHandleForHeapStart());
+	//passCbvHandle.Offset(passCbvIndex, mCbvSrvUavDescriptorSize);
+	//mCommandList->SetGraphicsRootDescriptorTable(0, passCbvHandle);
 
 	DrawRenderItems(mCommandList.Get(), cmdListAlloc.Get(), mOpaqueRenderPackets);
 
@@ -527,11 +528,11 @@ void Spectral::Graphics::GraphicsCore::UpdateObjectCBs(const std::vector<RenderP
 		//if (e->NumFramesDirty > 0)
 		//{
 			XMMATRIX world = XMLoadFloat4x4(&(packets[i]->World));
-			//XMMATRIX texTransform = XMLoadFloat4x4(&e->TexTransform);
-
+			XMMATRIX texTransform = XMLoadFloat4x4(&(packets[i]->TexTransform));
+	
 			ObjectConstants objConstants;
 			DirectX::XMStoreFloat4x4(&objConstants.World, XMMatrixTranspose(world));
-			//XMStoreFloat4x4(&objConstants.TexTransform, XMMatrixTranspose(texTransform));
+			XMStoreFloat4x4(&objConstants.TexTransform, XMMatrixTranspose(texTransform));
 
 			currObjectCB->CopyData(cbIndex, objConstants);
 
@@ -556,6 +557,7 @@ void Spectral::Graphics::GraphicsCore::UpdateMaterialCBs(const std::vector<Rende
 			XMMATRIX matTransform = XMLoadFloat4x4(&mat->MatTransform);
 
 			MaterialConstants matConstants;
+			matConstants.AmbientAlbedo = mat->AmbientAlbedo;
 			matConstants.DiffuseAlbedo = mat->DiffuseAlbedo;
 			matConstants.FresnelR0 = mat->FresnelR0;
 			matConstants.Roughness = mat->Roughness;
@@ -594,23 +596,91 @@ void Spectral::Graphics::GraphicsCore::UpdateMainPassCB()
 	mMainPassCB.TotalTime = 1;// gt.TotalTime(); //TODO: If this stays, need to have time access
 	mMainPassCB.DeltaTime = 1;// gt.DeltaTime();
 
-	// mMainPassCB.AmbientLight = { 0.25f, 0.25f, 0.35f, 1.0f };
-	mMainPassCB.Lights[0].Direction = { 0.57735f, -0.57735f, 0.57735f };
-	mMainPassCB.Lights[0].Strength = { 0.6f, 0.6f, 0.6f };
-	mMainPassCB.Lights[1].Direction = { -0.57735f, -0.57735f, 0.57735f };
-	mMainPassCB.Lights[1].Strength = { 0.3f, 0.3f, 0.3f };
-	mMainPassCB.Lights[2].Direction = { 0.0f, -0.707f, -0.707f };
-	mMainPassCB.Lights[2].Strength = { 0.15f, 0.15f, 0.15f };
+	//mMainPassCB.AmbientLight = { 0.25f, 0.25f, 0.35f, 1.0f }; // TODO: Reintroduce ambient light
+	////mMainPassCB.Lights[0].Direction = { 0.57735f, -0.57735f, 0.57735f };
+	////mMainPassCB.Lights[0].Strength = { 0.8f, 0.8f, 0.8f };
+	////mMainPassCB.Lights[1].Direction = { -0.57735f, -0.57735f, 0.57735f };
+	////mMainPassCB.Lights[1].Strength = { 0.4f, 0.4f, 0.4f };
+	////mMainPassCB.Lights[2].Direction = { 0.0f, -0.707f, -0.707f };
+	////mMainPassCB.Lights[2].Strength = { 0.2f, 0.2f, 0.2f };
 
-	//mMainPassCB.Lights[0].Position = { 5.57735f, 5.57735f, 5.57735f };
-	//mMainPassCB.Lights[0].Strength = { 0.8f, 0.8f, 0.8f };
-	//mMainPassCB.Lights[1].Position = { 0.0f, 5.57735f, 0.57735f };
-	//mMainPassCB.Lights[1].Strength = { 0.5f, 0.5f, 0.5f };
-	//mMainPassCB.Lights[2].Position = { 5.0f, 5.707f, 5.707f };
+	// mMainPassCB.AmbientLight = { 0.25f, 0.25f, 0.35f, 1.0f };
+	//mMainPassCB.Lights[0].Direction = { 0.57735f, -0.57735f, 0.57735f };
+	//mMainPassCB.Lights[0].Strength = { 0.6f, 0.6f, 0.6f };
+	//mMainPassCB.Lights[1].Direction = { -0.57735f, -0.57735f, 0.57735f };
+	//mMainPassCB.Lights[1].Strength = { 0.3f, 0.3f, 0.3f };
+	//mMainPassCB.Lights[2].Direction = { 0.0f, -0.707f, -0.707f };
 	//mMainPassCB.Lights[2].Strength = { 0.15f, 0.15f, 0.15f };
+
+	mMainPassCB.Lights[0].Position = { 6.57735f, 6.57735f, 6.57735f };
+	mMainPassCB.Lights[0].FalloffStart = 1.0f;
+	mMainPassCB.Lights[0].FalloffEnd = 30;
+	mMainPassCB.Lights[0].Strength = { 1.8f, 1.8f, 1.8f };
+	mMainPassCB.Lights[1].Position = { -12.0f, 2.57735f, -12.0f };
+	mMainPassCB.Lights[1].Strength = { 2.0f, 0.5f, 2.0f };
+	mMainPassCB.Lights[1].FalloffEnd = 18;
+	mMainPassCB.Lights[2].Position = { 5.0f, 5.707f, 5.707f };
+	mMainPassCB.Lights[2].Strength = { 0.0f, 0.0f, 0.0f };
 
 	auto currPassCB = mCurrFrameResource->PassCB.get();
 	currPassCB->CopyData(0, mMainPassCB);
+}
+
+std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> Spectral::Graphics::GraphicsCore::GetStaticSamplers()
+{
+	// Applications usually only need a handful of samplers.  So just define them all up front
+	// and keep them available as part of the root signature.  
+
+	const CD3DX12_STATIC_SAMPLER_DESC pointWrap(
+		0, // shaderRegister
+		D3D12_FILTER_MIN_MAG_MIP_POINT, // filter
+		D3D12_TEXTURE_ADDRESS_MODE_WRAP,  // addressU
+		D3D12_TEXTURE_ADDRESS_MODE_WRAP,  // addressV
+		D3D12_TEXTURE_ADDRESS_MODE_WRAP); // addressW
+
+	const CD3DX12_STATIC_SAMPLER_DESC pointClamp(
+		1, // shaderRegister
+		D3D12_FILTER_MIN_MAG_MIP_POINT, // filter
+		D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressU
+		D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressV
+		D3D12_TEXTURE_ADDRESS_MODE_CLAMP); // addressW
+
+	const CD3DX12_STATIC_SAMPLER_DESC linearWrap(
+		2, // shaderRegister
+		D3D12_FILTER_MIN_MAG_MIP_LINEAR, // filter
+		D3D12_TEXTURE_ADDRESS_MODE_WRAP,  // addressU
+		D3D12_TEXTURE_ADDRESS_MODE_WRAP,  // addressV
+		D3D12_TEXTURE_ADDRESS_MODE_WRAP); // addressW
+
+	const CD3DX12_STATIC_SAMPLER_DESC linearClamp(
+		3, // shaderRegister
+		D3D12_FILTER_MIN_MAG_MIP_LINEAR, // filter
+		D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressU
+		D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressV
+		D3D12_TEXTURE_ADDRESS_MODE_CLAMP); // addressW
+
+	const CD3DX12_STATIC_SAMPLER_DESC anisotropicWrap(
+		4, // shaderRegister
+		D3D12_FILTER_ANISOTROPIC, // filter
+		D3D12_TEXTURE_ADDRESS_MODE_WRAP,  // addressU
+		D3D12_TEXTURE_ADDRESS_MODE_WRAP,  // addressV
+		D3D12_TEXTURE_ADDRESS_MODE_WRAP,  // addressW
+		0.0f,                             // mipLODBias
+		8);                               // maxAnisotropy
+
+	const CD3DX12_STATIC_SAMPLER_DESC anisotropicClamp(
+		5, // shaderRegister
+		D3D12_FILTER_ANISOTROPIC, // filter
+		D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressU
+		D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressV
+		D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressW
+		0.0f,                              // mipLODBias
+		8);                                // maxAnisotropy
+
+	return {
+		pointWrap, pointClamp,
+		linearWrap, linearClamp,
+		anisotropicWrap, anisotropicClamp };
 }
 
 void Spectral::Graphics::GraphicsCore::BuildDescriptorHeaps()
@@ -628,12 +698,21 @@ void Spectral::Graphics::GraphicsCore::BuildDescriptorHeaps()
 	// Save an offset to the start of the pass CBVs.  These are the last 3 descriptors.
 	mPassCbvOffset = 0; // bufferCount * gNumFrameResources;
 
+	// Create the heap for CBVs.
 	D3D12_DESCRIPTOR_HEAP_DESC cbvHeapDesc;
 	cbvHeapDesc.NumDescriptors = numDescriptors;
 	cbvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 	cbvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 	cbvHeapDesc.NodeMask = 0;
 	ASSERT_HR(md3dDevice->CreateDescriptorHeap(&cbvHeapDesc, IID_PPV_ARGS(&mCbvHeap)));
+
+
+	// Create the SRV heap for textures.
+	D3D12_DESCRIPTOR_HEAP_DESC srvHeapDesc = {};
+	srvHeapDesc.NumDescriptors = 3;
+	srvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+	srvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+	ASSERT_HR(md3dDevice->CreateDescriptorHeap(&srvHeapDesc, IID_PPV_ARGS(&mSrvDescriptorHeap)));
 }
 
 void Spectral::Graphics::GraphicsCore::BuildConstantBufferViews()
@@ -803,16 +882,6 @@ void Spectral::Graphics::GraphicsCore::DrawRenderItems(ID3D12GraphicsCommandList
 			// Specify the buffers we are going to render to.
 			cmdList->OMSetRenderTargets(1, &CurrentBackBufferView(), true, &DepthStencilView());
 
-			ID3D12DescriptorHeap* descriptorHeaps[] = { mCbvHeap.Get() };
-			cmdList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
-
-			cmdList->SetGraphicsRootSignature(mRootSignature.Get());
-
-			int passCbvIndex = mPassCbvOffset + 0; // mCurrFrameResourceIndex;
-			auto passCbvHandle = CD3DX12_GPU_DESCRIPTOR_HANDLE(mCbvHeap->GetGPUDescriptorHandleForHeapStart());
-			passCbvHandle.Offset(passCbvIndex, mCbvSrvUavDescriptorSize);
-			cmdList->SetGraphicsRootDescriptorTable(0, passCbvHandle);
-
 			// We can now specify all of the drawing related commands.
 		}
 		auto ri = ritems[i];
@@ -820,6 +889,24 @@ void Spectral::Graphics::GraphicsCore::DrawRenderItems(ID3D12GraphicsCommandList
 		cmdList->IASetVertexBuffers(0, 1, &ri->Geo->VertexBufferView());
 		cmdList->IASetIndexBuffer(&ri->Geo->IndexBufferView());
 		cmdList->IASetPrimitiveTopology(ri->PrimitiveType);
+
+		cmdList->SetGraphicsRootSignature(mRootSignature.Get());
+
+		ID3D12DescriptorHeap* texDescriptorHeaps[] = { mSrvDescriptorHeap.Get() }; //-------------TODO: MAKE WORK?
+		mCommandList->SetDescriptorHeaps(_countof(texDescriptorHeaps), texDescriptorHeaps);
+
+		CD3DX12_GPU_DESCRIPTOR_HANDLE tex(mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+		tex.Offset(ri->Mat->DiffuseSrvHeapIndex, mCbvSrvUavDescriptorSize);
+
+		cmdList->SetGraphicsRootDescriptorTable(3, tex);
+
+		ID3D12DescriptorHeap* cbDescriptorHeaps[] = { mCbvHeap.Get() };
+		cmdList->SetDescriptorHeaps(_countof(cbDescriptorHeaps), cbDescriptorHeaps);
+
+		int passCbvIndex = mPassCbvOffset + 0; // mCurrFrameResourceIndex;
+		auto passCbvHandle = CD3DX12_GPU_DESCRIPTOR_HANDLE(mCbvHeap->GetGPUDescriptorHandleForHeapStart());
+		passCbvHandle.Offset(passCbvIndex, mCbvSrvUavDescriptorSize);
+		cmdList->SetGraphicsRootDescriptorTable(0, passCbvHandle);
 
 		// Offset to the CBV in the descriptor heap for this object's material and for this frame resource.
 		UINT cbvIndex = /*mCurrFrameResourceIndex*//*0*(UINT)mOpaqueRenderPackets.size() + */(i % NUM_CBUFFERS) + gNumFrameResources;
@@ -834,6 +921,14 @@ void Spectral::Graphics::GraphicsCore::DrawRenderItems(ID3D12GraphicsCommandList
 		cbvHandle.Offset(cbvIndex, mCbvSrvUavDescriptorSize);
 
 		cmdList->SetGraphicsRootDescriptorTable(2, cbvHandle);
+
+		//ID3D12DescriptorHeap* texDescriptorHeaps[] = { mSrvDescriptorHeap.Get() }; //-------------TODO: MAKE WORK?
+		//mCommandList->SetDescriptorHeaps(_countof(texDescriptorHeaps), texDescriptorHeaps);
+
+		//CD3DX12_GPU_DESCRIPTOR_HANDLE tex(mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+		//tex.Offset(ri->Mat->DiffuseSrvHeapIndex, mCbvSrvUavDescriptorSize);
+
+		//cmdList->SetGraphicsRootDescriptorTable(3, tex);
 
 		cmdList->DrawIndexedInstanced(ri->IndexCount, 1, ri->StartIndexLocation, ri->BaseVertexLocation, 0);
 	}
@@ -852,16 +947,22 @@ void Spectral::Graphics::GraphicsCore::BuildRootSignature()
 	CD3DX12_DESCRIPTOR_RANGE cbvTable2;
 	cbvTable2.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 2);
 
+	CD3DX12_DESCRIPTOR_RANGE texTable;
+	texTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
+
 	// Root parameter can be a table, root descriptor or root constants.
-	CD3DX12_ROOT_PARAMETER slotRootParameter[3];
+	CD3DX12_ROOT_PARAMETER slotRootParameter[4];
 
 	// Create root CBVs.
 	slotRootParameter[0].InitAsDescriptorTable(1, &cbvTable0); // PassCB
 	slotRootParameter[1].InitAsDescriptorTable(1, &cbvTable1); // MatCB
 	slotRootParameter[2].InitAsDescriptorTable(1, &cbvTable2); // ObjCB
+	slotRootParameter[3].InitAsDescriptorTable(1, &texTable, D3D12_SHADER_VISIBILITY_PIXEL); // texture
+
+	auto staticSamplers = GetStaticSamplers();
 
 	// A root signature is an array of root parameters.
-	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(3, slotRootParameter, 0, nullptr,
+	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(4, slotRootParameter, (UINT)staticSamplers.size(), staticSamplers.data(),
 		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
 	// create a root signature with a single slot which points to a descriptor range consisting of a single constant buffer
@@ -888,8 +989,8 @@ void Spectral::Graphics::GraphicsCore::BuildShadersAndInputLayout()
 	mInputLayout =
 	{
 		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-		{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
-		//{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 24, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
+		{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+		{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 24, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
 	};
 }
 
@@ -963,6 +1064,72 @@ Microsoft::WRL::ComPtr<ID3D12Resource> GraphicsCore::CreateDefaultBuffer(
 	FlushCommandQueue();
 
 	return defaultBuffer;
+}
+
+void Spectral::Graphics::GraphicsCore::LoadTextures(std::vector<Texture*>& texes)
+{
+	ASSERT_HR(mCommandList->Reset(mDirectCmdListAlloc.Get(), nullptr));
+
+	for (int i = 0; i < texes.size(); ++i)
+	{
+		ASSERT_HR(DirectX::CreateDDSTextureFromFile12(md3dDevice.Get(),
+			mCommandList.Get(), texes[i]->Filename.c_str(),
+			texes[i]->Resource, texes[i]->UploadHeap));
+	}
+
+	// Complete the initialization by executing the commands.
+	ASSERT_HR(mCommandList->Close());
+	ID3D12CommandList* cmdsLists[] = { mCommandList.Get() };
+	mCommandQueue->ExecuteCommandLists(_countof(cmdsLists), cmdsLists);
+
+	// Wait until initialization is complete.
+	FlushCommandQueue();
+
+	// TODO: Need to establish policies for when a command list will be open or closed.
+	// Need to also consider using lists with separate uses to maximize GPU throughput.
+}
+
+void Spectral::Graphics::GraphicsCore::SubmitSceneTextures(std::vector<Texture*>& texes, std::vector<short>& viewIndicies)
+{
+	// Temporary for now, since descriptors are set statically
+	assert(texes.size() <= NUM_CBUFFERS);
+
+	ASSERT_HR(mCommandList->Reset(mDirectCmdListAlloc.Get(), nullptr));
+
+	// Fill out the heap with actual descriptors.
+	CD3DX12_CPU_DESCRIPTOR_HANDLE handle(mSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
+
+	for (int i = 0; i < texes.size(); ++i)
+	{
+		auto texResource = texes[i]->Resource;
+		viewIndicies.push_back(i);
+
+		if (i)
+			handle.Offset(1, mCbvSrvUavDescriptorSize);
+
+		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+		srvDesc.Format = texResource->GetDesc().Format;
+		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+		srvDesc.Texture2D.MostDetailedMip = 0;
+		srvDesc.Texture2D.MipLevels = texResource->GetDesc().MipLevels;
+		srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
+		md3dDevice->CreateShaderResourceView(texResource.Get(), &srvDesc, handle);
+	}
+
+	// Complete the initialization by executing the commands.
+	ASSERT_HR(mCommandList->Close());
+	ID3D12CommandList* cmdsLists[] = { mCommandList.Get() };
+	mCommandQueue->ExecuteCommandLists(_countof(cmdsLists), cmdsLists);
+
+	// Wait until initialization is complete.
+	FlushCommandQueue();
+
+	// TODO: Need to establish policies for when a command list will be open or closed.
+	// Need to also consider using lists with separate uses to maximize GPU throughput.
+
+	for (int i = 0; i < texes.size(); ++i)
+		texes[i]->UploadHeap = nullptr;
 }
 
 // Temporary home

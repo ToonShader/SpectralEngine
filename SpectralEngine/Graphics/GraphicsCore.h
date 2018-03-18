@@ -15,6 +15,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <array>
 
 // TODO: Factor CB system into central CB class which manages the indicies into the buffer memory instead of the structures.
 // TODO: Compile and manage shaders outside of the low-level renderer?
@@ -56,8 +57,10 @@ namespace Spectral
 
 			Microsoft::WRL::ComPtr<ID3D12Resource> CreateDefaultBuffer(/*ID3D12Device* device, ID3D12GraphicsCommandList* cmdList,*/
 					const void* initData, UINT64 byteSize, Microsoft::WRL::ComPtr<ID3D12Resource>& uploadBuffer);
-				
 
+			void LoadTextures(std::vector<Texture*>& texes);
+			void SubmitSceneTextures(std::vector<Texture*>& texes, std::vector<short>& viewIndicies);
+				
 
 		private:
 			WNDPROC mProcCallback = nullptr;
@@ -93,7 +96,8 @@ namespace Spectral
 			void UpdateMaterialCBs(const std::vector<RenderPacket*>& packets, int startIndex, int numToUpdate);
 			void UpdateMainPassCB();
 
-
+			// Temporary
+			std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> GetStaticSamplers();
 
 
 
@@ -167,7 +171,7 @@ namespace Spectral
 			DirectX::XMFLOAT4X4 mProj = Math::XMF4x4Identity();
 			float mTheta = 1.5f*3.14159;
 			float mPhi = 0.35f*3.14159;
-			float mRadius = 25.0f;
+			float mRadius = 20.0f;
 
 			D3D12_VIEWPORT mScreenViewport;
 			D3D12_RECT mScissorRect;

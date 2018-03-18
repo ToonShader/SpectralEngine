@@ -3,6 +3,17 @@
 #include <string>
 #include <Common/Math.h>
 
+struct Texture
+{
+	// Unique material name for lookup.
+	std::string Name;
+
+	std::wstring Filename;
+
+	Microsoft::WRL::ComPtr<ID3D12Resource> Resource = nullptr;
+	Microsoft::WRL::ComPtr<ID3D12Resource> UploadHeap = nullptr;
+};
+
 struct Material
 {
 	// Unique material name for lookup.
@@ -12,7 +23,7 @@ struct Material
 	//int MatCBIndex = -1;
 
 	// Index into SRV heap for diffuse texture.
-	//int DiffuseSrvHeapIndex = -1;
+	int DiffuseSrvHeapIndex = -1;
 
 	// Index into SRV heap for normal texture.
 	//int NormalSrvHeapIndex = -1;

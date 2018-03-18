@@ -75,6 +75,7 @@ private:
 struct ObjectConstants
 {
 	DirectX::XMFLOAT4X4 World = Spectral::Math::XMF4x4Identity();
+	DirectX::XMFLOAT4X4 TexTransform = Spectral::Math::XMF4x4Identity();
 };
 
 struct MaterialConstants
@@ -113,6 +114,7 @@ struct Vertex
 {
 	DirectX::XMFLOAT3 Position;
 	DirectX::XMFLOAT3 Normal;
+	DirectX::XMFLOAT2 TexCoord;
 };
 
  
