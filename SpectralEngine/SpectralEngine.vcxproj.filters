@@ -28,6 +28,15 @@
     <Filter Include="Source Files\Common">
       <UniqueIdentifier>{c9a35ea9-6b6e-4b66-8c49-d6f06884aab4}</UniqueIdentifier>
     </Filter>
+    <Filter Include="TEMP\Common">
+      <UniqueIdentifier>{3a507e30-c283-46fb-84d3-4730bedbedcf}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="TEMP\Waves">
+      <UniqueIdentifier>{62410065-9bdd-4026-baff-474d6aaff37a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="TEMP\Shapes">
+      <UniqueIdentifier>{a5846811-343b-45f4-8133-958214bcd4f7}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Microsoft\d3dx12.h">
@@ -48,6 +57,30 @@
     <ClInclude Include="Common\Utility.h">
       <Filter>Source Files\Common</Filter>
     </ClInclude>
+    <ClInclude Include="TEMP\Common\GeometryGenerator.h">
+      <Filter>TEMP\Common</Filter>
+    </ClInclude>
+    <ClInclude Include="Graphics\RenderPacket.h">
+      <Filter>Source Files\Graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="Graphics\Mesh.h">
+      <Filter>Source Files\Graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\Math.h">
+      <Filter>Source Files\Common</Filter>
+    </ClInclude>
+    <ClInclude Include="Graphics\FrameResource.h">
+      <Filter>Source Files\Graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="Graphics\Material.h">
+      <Filter>Source Files\Graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="Graphics\Lighting.h">
+      <Filter>Source Files\Graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="Microsoft\DDSTextureLoader.h">
+      <Filter>Source Files\Microsoft</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Run.cpp">
@@ -62,5 +95,55 @@
     <ClCompile Include="Graphics\GraphicsCore.cpp">
       <Filter>Source Files\Graphics</Filter>
     </ClCompile>
+    <ClCompile Include="TEMP\Common\GeometryGenerator.cpp">
+      <Filter>TEMP\Common</Filter>
+    </ClCompile>
+    <ClCompile Include="Graphics\RenderPacket.cpp">
+      <Filter>Source Files\Graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="Graphics\Mesh.cpp">
+      <Filter>Source Files\Graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="Common\Math.cpp">
+      <Filter>Source Files\Common</Filter>
+    </ClCompile>
+    <ClCompile Include="Graphics\FrameResource.cpp">
+      <Filter>Source Files\Graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="Microsoft\DDSTextureLoader.cpp">
+      <Filter>Source Files\Microsoft</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Shaders\LightingUtil.hlsl">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\Default.hlsl">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="TEMP\Shapes\ShapesApp.cpp">
+      <Filter>TEMP</Filter>
+    </None>
+    <None Include="TEMP\LitColumnsApp.cpp">
+      <Filter>TEMP</Filter>
+    </None>
+    <None Include="TEMP\Shapes\color.hlsl">
+      <Filter>TEMP\Waves</Filter>
+    </None>
+    <None Include="TEMP\FrameResource.cpp">
+      <Filter>TEMP</Filter>
+    </None>
+    <None Include="TEMP\FrameResource.h">
+      <Filter>TEMP</Filter>
+    </None>
+    <None Include="TEMP\TexColumnsApp.cpp">
+      <Filter>TEMP</Filter>
+    </None>
+    <None Include="TEMP\Default.hlsl">
+      <Filter>TEMP</Filter>
+    </None>
+    <None Include="TEMP\LightingUtil.hlsl">
+      <Filter>TEMP</Filter>
+    </None>
   </ItemGroup>
 </Project>
