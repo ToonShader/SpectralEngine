@@ -7,11 +7,16 @@
 #include <DirectXColors.h>
 #include <d3dcompiler.h>
 #include <d3d12SDKLayers.h>
+#include <nvToolsExt.h>
 
 //#pragma comment(lib, "d3dcompiler.lib")
 #pragma comment(lib, "D3D12.lib")
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "d3dcompiler.lib")
+
+// Simple toggle for benchmarking to disable debug layers
+#define RELEASE
+
 
 #ifndef RELEASE
 #define new new ( _NORMAL_BLOCK , __FILE__ , __LINE__ )
@@ -25,7 +30,7 @@ GraphicsCore* GraphicsCore::mGraphicsCore = nullptr;
 using namespace DirectX;
 
 const int gNumFrameResources = 1;
-const int NUM_CBUFFERS = 35;
+const int NUM_CBUFFERS = 3000;
 
 GraphicsCore::GraphicsCore()
 {
@@ -36,6 +41,12 @@ GraphicsCore::~GraphicsCore()
 {
 	if (md3dDevice != nullptr)
 		FlushCommandQueue();
+
+	// We must disable fullscreen on the swap chain before terminating
+	BOOL fullscreen;
+	mSwapChain->GetFullscreenState(&fullscreen, nullptr);
+	if (fullscreen)
+		ASSERT_HR(mSwapChain->SetFullscreenState(false, nullptr));
 
 	if (mCurrFrameResource != nullptr)
 		delete mCurrFrameResource;
@@ -106,7 +117,7 @@ void GraphicsCore::ResizeWindow()
 		SWAP_CHAIN_BUFFER_COUNT,
 		mClientWidth, mClientHeight,
 		mBackBufferFormat,
-		DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH));
+		0));
 
 	mCurrBackBuffer = 0;
 
@@ -163,7 +174,7 @@ void GraphicsCore::ResizeWindow()
 	mScissorRect = { 0, 0, mClientWidth, mClientHeight };
 }
 
-void Spectral::Graphics::GraphicsCore::SubmitRenderPackets(const std::vector<RenderPacket*>& packets)
+void GraphicsCore::SubmitRenderPackets(const std::vector<RenderPacket*>& packets)
 {
 	mAllRenderPackets.insert(mAllRenderPackets.end(), packets.begin(), packets.end());
 	// For now, all packets are also opaque
@@ -215,42 +226,30 @@ void GraphicsCore::RenderPrePass()
 	FlushCommandQueue();
 }
 
-void Spectral::Graphics::GraphicsCore::testrender()
+void GraphicsCore::testrender(const Camera& camera)
 {
+	nvtxRangePushW(L"Scene Render");
+
+	DirectX::XMStoreFloat4x4(&mProj, camera.GetProj());
+	DirectX::XMStoreFloat4x4(&mView, camera.GetView());
+	DirectX::XMStoreFloat3(&mEyePos, camera.GetPosition());
+
 	// Each region marks distinct behavior which will be moved or removed soon.
-#pragma region UPDATE_CAMERA
-	XMMATRIX P = XMMatrixPerspectiveFovLH(0.25f * XM_PI, static_cast<float>(mClientWidth) / mClientHeight, 1.0f, 1000.0f);
-	DirectX::XMStoreFloat4x4(&mProj, P);
-	// Convert Spherical to Cartesian coordinates.
-	mTheta += 0.115;
-	mEyePos.x = mRadius*sinf(mPhi)*cosf(mTheta);
-	mEyePos.z = mRadius*sinf(mPhi)*sinf(mTheta);
-	mEyePos.y = mRadius*cosf(mPhi);
-
-	// Build the view matrix.
-	XMVECTOR pos = XMVectorSet(mEyePos.x, mEyePos.y, mEyePos.z, 1.0f);
-	XMVECTOR target = XMVectorZero();
-	XMVECTOR up = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
-
-	XMMATRIX view = XMMatrixLookAtLH(pos, target, up);
-	DirectX::XMStoreFloat4x4(&mView, view);
-#pragma endregion
-
 #pragma region UPDATE
 	//mCurrFrameResourceIndex = (mCurrFrameResourceIndex + 1) % gNumFrameResources;
 	//mCurrFrameResource = mFrameResources[mCurrFrameResourceIndex].get();
 
-	// Has the GPU finished processing the commands of the current frame resource?
-	// If not, wait until the GPU has completed commands up to this fence point.
-	if (mCurrFrameResource->Fence != 0 && mFence->GetCompletedValue() < mCurrFrameResource->Fence)
-	{
-		HANDLE eventHandle = CreateEventEx(nullptr, false, false, EVENT_ALL_ACCESS);
-		ASSERT_HR(mFence->SetEventOnCompletion(mCurrFrameResource->Fence, eventHandle));
-		WaitForSingleObject(eventHandle, INFINITE);
-		CloseHandle(eventHandle);
-	}
+	// Force completion of any unexecuted GPU commands
+	//if (mCurrFrameResource->Fence != 0 && mFence->GetCompletedValue() < mCurrFrameResource->Fence)
+	//{
+	//	HANDLE eventHandle = CreateEventEx(nullptr, false, false, EVENT_ALL_ACCESS);
+	//	ASSERT_HR(mFence->SetEventOnCompletion(mCurrFrameResource->Fence, eventHandle));
+	//	WaitForSingleObject(eventHandle, INFINITE);
+	//	CloseHandle(eventHandle);
+	//}
 
-	//UpdateObjectCBs();
+	FlushCommandQueue();
+
 	UpdateMainPassCB();
 #pragma endregion
 
@@ -320,6 +319,8 @@ void Spectral::Graphics::GraphicsCore::testrender()
 	mCommandQueue->Signal(mFence.Get(), mCurrentFence);
 
 #pragma endregion
+
+	nvtxRangePop();
 }
 
 #define D3DCOMPILE_DEBUG 1
@@ -338,8 +339,8 @@ bool GraphicsCore::InitDirect3D()
 
 	ASSERT_HR(CreateDXGIFactory2(dxgiFactoryFlags, IID_PPV_ARGS(&mdxgiFactory)));
 
-	// Create hardware device for default adapter with feature level 12
-	HRESULT hr = D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_12_0, IID_PPV_ARGS(&md3dDevice));
+	// Create hardware device for default adapter with feature level 11
+	HRESULT hr = D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&md3dDevice));
 	if (FAILED(hr))
 	{
 		// Fallback to warp device if default
@@ -481,7 +482,7 @@ void GraphicsCore::CreateSwapChain()
 	scDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 	scDesc.BufferCount = SWAP_CHAIN_BUFFER_COUNT;
 	scDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-	scDesc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
+	scDesc.Flags = 0;
 
 	// Note: Swap chain flushes queue
 	// Note: This is where initial fullscreen will need to be established
@@ -491,6 +492,8 @@ void GraphicsCore::CreateSwapChain()
 
 void GraphicsCore::FlushCommandQueue()
 {
+	nvtxRangePushW(L"Flush CQ");
+
 	// Mark new fence value
 	mCurrentFence++;
 
@@ -512,10 +515,14 @@ void GraphicsCore::FlushCommandQueue()
 		WaitForSingleObject(eventHandle, INFINITE);
 		CloseHandle(eventHandle);
 	}*/
+
+	nvtxRangePop();
 }
 
-void Spectral::Graphics::GraphicsCore::UpdateObjectCBs(const std::vector<RenderPacket*>& packets, int startIndex, int numToUpdate)
+void GraphicsCore::UpdateObjectCBs(const std::vector<RenderPacket*>& packets, int startIndex, int numToUpdate)
 {
+	nvtxRangePushW(L"Update OCBs");
+
 	assert(numToUpdate <= NUM_CBUFFERS);
 	auto currObjectCB = mCurrFrameResource->ObjectCB.get();
 
@@ -540,10 +547,14 @@ void Spectral::Graphics::GraphicsCore::UpdateObjectCBs(const std::vector<RenderP
 			//e->NumFramesDirty--;
 		//}
 	}
+
+	nvtxRangePop();
 }
 
-void Spectral::Graphics::GraphicsCore::UpdateMaterialCBs(const std::vector<RenderPacket*>& packets, int startIndex, int numToUpdate)
+void GraphicsCore::UpdateMaterialCBs(const std::vector<RenderPacket*>& packets, int startIndex, int numToUpdate)
 {
+	nvtxRangePushW(L"Update MCBs");
+
 	assert(numToUpdate <= NUM_CBUFFERS);
 	auto currMaterialCB = mCurrFrameResource->MaterialCB.get();
 
@@ -568,10 +579,14 @@ void Spectral::Graphics::GraphicsCore::UpdateMaterialCBs(const std::vector<Rende
 			//mat->NumFramesDirty--;
 		//}
 	}
+
+	nvtxRangePop();
 }
 
-void Spectral::Graphics::GraphicsCore::UpdateMainPassCB()
+void GraphicsCore::UpdateMainPassCB()
 {
+	nvtxRangePushW(L"Update MPCB");
+
 	// This is overkill for now, but may prove useful in the future if
 	// I decide to keep per-pass CBs
 	XMMATRIX view = XMLoadFloat4x4(&mView);
@@ -613,20 +628,60 @@ void Spectral::Graphics::GraphicsCore::UpdateMainPassCB()
 	//mMainPassCB.Lights[2].Strength = { 0.15f, 0.15f, 0.15f };
 
 	mMainPassCB.Lights[0].Position = { 6.57735f, 6.57735f, 6.57735f };
-	mMainPassCB.Lights[0].FalloffStart = 1.0f;
 	mMainPassCB.Lights[0].FalloffEnd = 30;
 	mMainPassCB.Lights[0].Strength = { 1.8f, 1.8f, 1.8f };
+
 	mMainPassCB.Lights[1].Position = { -12.0f, 2.57735f, -12.0f };
 	mMainPassCB.Lights[1].Strength = { 2.0f, 0.5f, 2.0f };
 	mMainPassCB.Lights[1].FalloffEnd = 18;
-	mMainPassCB.Lights[2].Position = { 5.0f, 5.707f, 5.707f };
-	mMainPassCB.Lights[2].Strength = { 0.0f, 0.0f, 0.0f };
+
+	mMainPassCB.Lights[2].Position = { 0.0f, 8.0f, 90.0f };
+	mMainPassCB.Lights[2].Strength = { 1.0f, 1.0f, 1.0f };
+	mMainPassCB.Lights[2].FalloffStart = 40;
+	mMainPassCB.Lights[2].FalloffEnd = 60;
+
+	mMainPassCB.Lights[3].Position = { 90.0f, 8.0f, 90.0f };
+	mMainPassCB.Lights[3].Strength = { 1.0f, 1.0f, 1.0f };
+	mMainPassCB.Lights[3].FalloffStart = 40;
+	mMainPassCB.Lights[3].FalloffEnd = 60;
+
+	mMainPassCB.Lights[4].Position = { 90.0f, 8.0f, 0.0f };
+	mMainPassCB.Lights[4].Strength = { 1.0f, 1.0f, 1.0f };
+	mMainPassCB.Lights[4].FalloffStart = 40;
+	mMainPassCB.Lights[4].FalloffEnd = 60;
+
+	mMainPassCB.Lights[5].Position = { 90.0f, 8.0f, -90.0f };
+	mMainPassCB.Lights[5].Strength = { 1.0f, 1.0f, 1.0f };
+	mMainPassCB.Lights[5].FalloffStart = 40;
+	mMainPassCB.Lights[5].FalloffEnd = 60;
+
+	mMainPassCB.Lights[6].Position = { 0.0f, 8.0f, -90.0f };
+	mMainPassCB.Lights[6].Strength = { 1.0f, 1.0f, 1.0f };
+	mMainPassCB.Lights[6].FalloffStart = 40;
+	mMainPassCB.Lights[6].FalloffEnd = 60;
+
+	mMainPassCB.Lights[7].Position = { -90.0f, 8.0f, -90.0f };
+	mMainPassCB.Lights[7].Strength = { 1.0f, 1.0f, 1.0f };
+	mMainPassCB.Lights[7].FalloffStart = 40;
+	mMainPassCB.Lights[7].FalloffEnd = 60;
+
+	mMainPassCB.Lights[8].Position = { -90.0f, 8.0f, 0.0f };
+	mMainPassCB.Lights[8].Strength = { 1.0f, 1.0f, 1.0f };
+	mMainPassCB.Lights[8].FalloffStart = 40;
+	mMainPassCB.Lights[8].FalloffEnd = 60;
+
+	mMainPassCB.Lights[9].Position = { -90.0f, 8.0f, 90.0f };
+	mMainPassCB.Lights[9].Strength = { 1.0f, 1.0f, 1.0f };
+	mMainPassCB.Lights[9].FalloffStart = 40;
+	mMainPassCB.Lights[9].FalloffEnd = 60;
 
 	auto currPassCB = mCurrFrameResource->PassCB.get();
 	currPassCB->CopyData(0, mMainPassCB);
+
+	nvtxRangePop();
 }
 
-std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> Spectral::Graphics::GraphicsCore::GetStaticSamplers()
+std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> GraphicsCore::GetStaticSamplers()
 {
 	// Applications usually only need a handful of samplers.  So just define them all up front
 	// and keep them available as part of the root signature.  
@@ -683,7 +738,7 @@ std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> Spectral::Graphics::GraphicsCor
 		anisotropicWrap, anisotropicClamp };
 }
 
-void Spectral::Graphics::GraphicsCore::BuildDescriptorHeaps()
+void GraphicsCore::BuildDescriptorHeaps()
 {
 	// The design of this system isn't fully decided,
 	// but for now the number of buffers is fixed.
@@ -715,7 +770,7 @@ void Spectral::Graphics::GraphicsCore::BuildDescriptorHeaps()
 	ASSERT_HR(md3dDevice->CreateDescriptorHeap(&srvHeapDesc, IID_PPV_ARGS(&mSrvDescriptorHeap)));
 }
 
-void Spectral::Graphics::GraphicsCore::BuildConstantBufferViews()
+void GraphicsCore::BuildConstantBufferViews()
 {
 	UINT objCount = NUM_CBUFFERS;
 
@@ -792,7 +847,7 @@ void Spectral::Graphics::GraphicsCore::BuildConstantBufferViews()
 	//}
 }
 
-void Spectral::Graphics::GraphicsCore::BuildPSOs()
+void GraphicsCore::BuildPSOs()
 {
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC opaquePsoDesc;
 
@@ -829,7 +884,7 @@ void Spectral::Graphics::GraphicsCore::BuildPSOs()
 	ASSERT_HR(md3dDevice->CreateGraphicsPipelineState(&opaqueWireframePsoDesc, IID_PPV_ARGS(&mPSOs["opaque_wireframe"])));
 }
 
-void Spectral::Graphics::GraphicsCore::BuildFrameResources()
+void GraphicsCore::BuildFrameResources()
 {
 	if (mCurrFrameResource)
 		delete mCurrFrameResource;
@@ -840,8 +895,10 @@ void Spectral::Graphics::GraphicsCore::BuildFrameResources()
 	//}
 }
 
-void Spectral::Graphics::GraphicsCore::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, ID3D12CommandAllocator* listAlloc, const std::vector<RenderPacket*>& ritems)
+void GraphicsCore::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, ID3D12CommandAllocator* listAlloc, const std::vector<RenderPacket*>& ritems)
 {
+	nvtxRangePushW(L"Draw Items");
+
 	UINT objCBByteSize = CalcConstantBufferByteSize(sizeof(ObjectConstants));
 
 	//auto objectCB = mCurrFrameResource->ObjectCB->Resource();
@@ -934,9 +991,11 @@ void Spectral::Graphics::GraphicsCore::DrawRenderItems(ID3D12GraphicsCommandList
 	}
 
 	// TODO: Clean command list by executing commands before exiting?
+
+	nvtxRangePop();
 }
 
-void Spectral::Graphics::GraphicsCore::BuildRootSignature()
+void GraphicsCore::BuildRootSignature()
 {
 	CD3DX12_DESCRIPTOR_RANGE cbvTable0;
 	cbvTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0);
@@ -981,10 +1040,10 @@ void Spectral::Graphics::GraphicsCore::BuildRootSignature()
 		serializedRootSig->GetBufferSize(), IID_PPV_ARGS(mRootSignature.GetAddressOf())));
 }
 
-void Spectral::Graphics::GraphicsCore::BuildShadersAndInputLayout()
+void GraphicsCore::BuildShadersAndInputLayout()
 {
-	mShaders["standardVS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "VS", "vs_5_1");
-	mShaders["opaquePS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "PS", "ps_5_1");
+	mShaders["standardVS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "VS", "vs_4_0");
+	mShaders["opaquePS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "PS", "ps_4_0");
 
 	mInputLayout =
 	{
@@ -994,18 +1053,18 @@ void Spectral::Graphics::GraphicsCore::BuildShadersAndInputLayout()
 	};
 }
 
-ID3D12Resource * Spectral::Graphics::GraphicsCore::CurrentBackBuffer() const
+ID3D12Resource* GraphicsCore::CurrentBackBuffer() const
 {
 	return mSwapChainBuffer[mCurrBackBuffer].Get();
 }
 
-D3D12_CPU_DESCRIPTOR_HANDLE Spectral::Graphics::GraphicsCore::CurrentBackBufferView() const
+D3D12_CPU_DESCRIPTOR_HANDLE GraphicsCore::CurrentBackBufferView() const
 {
 	return CD3DX12_CPU_DESCRIPTOR_HANDLE(mRtvHeap->GetCPUDescriptorHandleForHeapStart(),
 		mCurrBackBuffer, mRtvDescriptorSize);
 }
 
-D3D12_CPU_DESCRIPTOR_HANDLE Spectral::Graphics::GraphicsCore::DepthStencilView() const
+D3D12_CPU_DESCRIPTOR_HANDLE GraphicsCore::DepthStencilView() const
 {
 	return mDsvHeap->GetCPUDescriptorHandleForHeapStart();
 }
@@ -1066,7 +1125,7 @@ Microsoft::WRL::ComPtr<ID3D12Resource> GraphicsCore::CreateDefaultBuffer(
 	return defaultBuffer;
 }
 
-void Spectral::Graphics::GraphicsCore::LoadTextures(std::vector<Texture*>& texes)
+void GraphicsCore::LoadTextures(std::vector<Texture*>& texes)
 {
 	ASSERT_HR(mCommandList->Reset(mDirectCmdListAlloc.Get(), nullptr));
 
@@ -1089,7 +1148,7 @@ void Spectral::Graphics::GraphicsCore::LoadTextures(std::vector<Texture*>& texes
 	// Need to also consider using lists with separate uses to maximize GPU throughput.
 }
 
-void Spectral::Graphics::GraphicsCore::SubmitSceneTextures(std::vector<Texture*>& texes, std::vector<short>& viewIndicies)
+void GraphicsCore::SubmitSceneTextures(std::vector<Texture*>& texes, std::vector<short>& viewIndicies)
 {
 	// Temporary for now, since descriptors are set statically
 	assert(texes.size() <= NUM_CBUFFERS);
@@ -1132,6 +1191,27 @@ void Spectral::Graphics::GraphicsCore::SubmitSceneTextures(std::vector<Texture*>
 		texes[i]->UploadHeap = nullptr;
 }
 
+void GraphicsCore::Resize(int width, int height)
+{
+	mClientWidth = width;
+	mClientHeight = height;
+	ResizeWindow();
+}
+
+void GraphicsCore::SetFullScreen(bool fullscreen)
+{
+	if (fullscreen & !mFullScreen)
+	{
+		ASSERT_HR(mSwapChain->SetFullscreenState(true, nullptr));
+		mFullScreen = true;
+	}
+	else
+	{
+		ASSERT_HR(mSwapChain->SetFullscreenState(false, nullptr));
+		mFullScreen = false;
+	}
+}
+
 // Temporary home
 Microsoft::WRL::ComPtr<ID3DBlob> CompileShader(
 	const std::wstring& filename,
@@ -1141,7 +1221,7 @@ Microsoft::WRL::ComPtr<ID3DBlob> CompileShader(
 {
 	UINT compileFlags = 0;
 #ifndef RELEASE  
-	compileFlags = D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
+	compileFlags = D3DCOMPILE_PREFER_FLOW_CONTROL | D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
 #endif
 
 	HRESULT hr = S_OK;

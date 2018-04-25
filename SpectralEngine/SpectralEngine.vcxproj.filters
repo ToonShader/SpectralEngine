@@ -81,6 +81,9 @@
     <ClInclude Include="Microsoft\DDSTextureLoader.h">
       <Filter>Source Files\Microsoft</Filter>
     </ClInclude>
+    <ClInclude Include="Common\Camera.h">
+      <Filter>Source Files\Common</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Run.cpp">
@@ -112,6 +115,9 @@
     </ClCompile>
     <ClCompile Include="Microsoft\DDSTextureLoader.cpp">
       <Filter>Source Files\Microsoft</Filter>
+    </ClCompile>
+    <ClCompile Include="Common\Camera.cpp">
+      <Filter>Source Files\Common</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

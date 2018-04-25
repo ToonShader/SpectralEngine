@@ -19,6 +19,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Common\Camera.h" />
     <ClInclude Include="Common\Math.h" />
     <ClInclude Include="Common\Timer.h" />
     <ClInclude Include="Common\Types.h" />
@@ -36,6 +37,7 @@
     <None Include="TEMP\FrameResource.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Common\Camera.cpp" />
     <ClCompile Include="Common\Math.cpp" />
     <ClCompile Include="Common\Timer.cpp" />
     <ClCompile Include="Common\WindowManager.cpp" />
@@ -77,7 +79,7 @@
     <ProjectGuid>{F74C5BF5-1079-454E-93FF-EE798FB5A65F}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>SpectralEngine</RootNamespace>
-    <WindowsTargetPlatformVersion>10.0.15063.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0.16299.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">

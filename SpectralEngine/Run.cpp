@@ -1,7 +1,8 @@
+// #define RELEASE // (Temporary) Secondary toggle for benchmarking
 #include "Common\Timer.h"
 #include "Common\WindowManager.h"
 #include "Graphics\GraphicsCore.h"
-#include <Windows.h>
+#include <Windowsx.h>
 #include <dxgi1_4.h>
 #include <d3d12.h>
 #include <dxgidebug.h>
@@ -10,39 +11,190 @@
 #include "TEMP\Common\GeometryGenerator.h"
 #include "Common\Math.h"
 #include "Microsoft\DDSTextureLoader.h"
+#include <string>
+#include <cstdlib>
+
 
 #ifndef RELEASE
 #define new new ( _NORMAL_BLOCK , __FILE__ , __LINE__ )
 #endif
 
+// Simple toggle for benchmarking
+//#define BENCHMARK
+
 #pragma comment(lib, "dxguid.lib")
 //#pragma comment(lib, "dxgidebug.lib")
-Spectral::Graphics::GraphicsCore* core = nullptr;
+
+Spectral::Graphics::GraphicsCore* gGraphicsCore = nullptr;
+std::unique_ptr<WindowManager> gWindow;
+
+std::unordered_map<std::string, std::unique_ptr<Mesh>> gGeometries;
+std::unordered_map<std::string, std::unique_ptr<Texture>> gTextures;
+std::unordered_map<std::string, std::unique_ptr<Material>> gMaterials;
+std::vector<std::unique_ptr<RenderPacket>> gAllRitems;
 
 void CalculateFrameStats(Timer& timer, HWND hWnd);
-std::unordered_map<std::string, std::unique_ptr<Mesh>> gGeometries;
-std::vector<std::unique_ptr<RenderPacket>> gAllRitems;
-std::unordered_map<std::string, std::unique_ptr<Texture>> gTextures;
 void BuildShapeGeometry();
 void BuildRenderItems();
 void BuildMaterials();
 
+void OnMouseDown(WPARAM btnState, int x, int y);
+void OnMouseUp(WPARAM btnState, int x, int y);
+void OnMouseMove(WPARAM btnState, int x, int y);
+POINT gLastMousePos;
+Camera gSceneCamera;
+float gRotateX;
 
-std::unordered_map<std::string, std::unique_ptr<Material>> mMaterials;
-//std::unordered_map<std::string, std::unique_ptr<Texture>> mTextures;
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	switch (message)
 	{
-	//case WM_SIZE:
-	//	if (core)
-	//		...
+	//case WM_ACTIVATE:
+	//	if (LOWORD(wParam) == WA_INACTIVE)
+	//	{
+	//		mAppPaused = true;
+	//		mTimer.Stop();
+	//	}
+	//	else
+	//	{
+	//		mAppPaused = false;
+	//		mTimer.Start();
+	//	}
+	//	return 0;
+
+	case WM_SIZE:
+		if (gWindow != nullptr)
+		{
+			int clientWidth = LOWORD(lParam);
+			int clientHeight = HIWORD(lParam);
+			gWindow->SetDimensions(clientWidth, clientHeight);
+			//OutputDebugString((L"W: " + std::to_wstring(clientWidth) + L"\tH:" + std::to_wstring(clientHeight) + L"\n").c_str());
+		}
+		if (gGraphicsCore != nullptr)
+		{
+			if (wParam == SIZE_MINIMIZED)
+			{
+				//mAppPaused = true;
+				//mMinimized = true;
+				//mMaximized = false;
+				//OutputDebugString(L"A\n");
+			}
+			else if (wParam == SIZE_MAXIMIZED)
+			{
+				//mAppPaused = false;
+				//mMinimized = false;
+				//mMaximized = true;
+				int clientWidth, clientHeight;
+				gWindow->GetDimensions(clientWidth, clientHeight);
+				gGraphicsCore->Resize(clientWidth, clientHeight);
+				gSceneCamera.SetLens(0.25f * XM_PI, static_cast<float>(clientWidth) / clientHeight, 1.0f, 1000.0f);
+
+				//OutputDebugString(L"B\n");
+			}
+			else if (wParam == SIZE_RESTORED)
+			{
+				//OutputDebugString(L"C\n");
+				int clientWidth, clientHeight;
+				gWindow->GetDimensions(clientWidth, clientHeight);
+				gGraphicsCore->Resize(clientWidth, clientHeight);
+				gSceneCamera.SetLens(0.25f * XM_PI, static_cast<float>(clientWidth) / clientHeight, 1.0f, 1000.0f);
+				//// Restoring from minimized state?
+				//if (mMinimized)
+				//{
+				//	mAppPaused = false;
+				//	mMinimized = false;
+				//	OnResize();
+				//}
+
+				//// Restoring from maximized state?
+				//else if (mMaximized)
+				//{
+				//	mAppPaused = false;
+				//	mMaximized = false;
+				//	OnResize();
+				//}
+				//else if (mResizing)
+				//{
+				//
+				//}
+				//else // API call such as SetWindowPos or mSwapChain->SetFullscreenState.
+				//{
+				//	OnResize();
+				//}
+			}
+			//else
+			//{
+			//	OutputDebugString(L"BAM!\n");
+			//}
+		}
+		return 0;
+
+	//case WM_ENTERSIZEMOVE:
+	//	mAppPaused = true;
+	//	mResizing = true;
 	//	break;
+
+	case WM_EXITSIZEMOVE:
+		//mAppPaused = false;
+		//mResizing = false;
+		if (gGraphicsCore != nullptr)
+		{
+			int clientWidth, clientHeight;
+			gWindow->GetDimensions(clientWidth, clientHeight);
+			gGraphicsCore->Resize(clientWidth, clientHeight);
+			gSceneCamera.SetLens(0.25f * XM_PI, static_cast<float>(clientWidth) / clientHeight, 1.0f, 1000.0f);
+		}
+		break;
+
+	case WM_MENUCHAR:
+		// Don't beep when we alt-enter.
+		return MAKELRESULT(0, MNC_CLOSE);
+
+	//case WM_GETMINMAXINFO:
+	//	((MINMAXINFO*)lParam)->ptMinTrackSize.x = 200;
+	//	((MINMAXINFO*)lParam)->ptMinTrackSize.y = 200;
+	//	return 0;
+
+	case WM_LBUTTONDOWN:
+	case WM_MBUTTONDOWN:
+	case WM_RBUTTONDOWN:
+		OnMouseDown(wParam, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
+		break;
+
+	case WM_LBUTTONUP:
+	case WM_MBUTTONUP:
+	case WM_RBUTTONUP:
+		OnMouseUp(wParam, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
+		break;
+
+	case WM_MOUSEMOVE:
+		OnMouseMove(wParam, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
+		break;
+
+	case WM_KEYUP:
+		if (wParam == VK_ESCAPE)
+			PostQuitMessage(0);
+		break;
+
+	//case WM_SYSKEYUP:
+	//	if (wParam == VK_RETURN)
+	//	{
+	//		OutputDebugString(L"D\n");
+	//		if (gGraphicsCore != nullptr)
+	//		{
+	//			int width, height;
+	//			gWindow->GetDimensions(width, height);
+	//			OutputDebugString((L"WW: " + std::to_wstring(width) + L"\tHH:" + std::to_wstring(height) + L"\n").c_str());
+	//		}
+
+	//		return 0;
+	//	}
+
+	//	return DefWindowProc(hWnd, message, wParam, lParam);
 
 	case WM_DESTROY:
 		PostQuitMessage(0);
-		return 0;
 		break;
 
 	default:
@@ -59,15 +211,30 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE prevInstance,
 	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
 #endif
 
+	// Scope the main message pump so that we can check for memory leaks and live objects afterwards
 	{
 		Timer timer;
 		timer.Reset();
-		WindowManager window(hInstance, L"WOOT");
-		window.InitWindow(800, 600, WndProc);
-		core = Spectral::Graphics::GraphicsCore::GetGraphicsCoreInstance(window.getHandle());
+		gWindow = std::make_unique<WindowManager>(hInstance, L"Spectral Demo");
+		gWindow->InitWindow(800, 600, WndProc);
+		gGraphicsCore = Spectral::Graphics::GraphicsCore::GetGraphicsCoreInstance(gWindow->getHandle());
 		BuildShapeGeometry();
 		BuildMaterials();
 		BuildRenderItems();
+
+		#ifdef BENCHMARK
+		gGraphicsCore->SetFullScreen(true);
+		float theta = 1.5f*3.14159;
+		float phi = 0.40f*3.14159;
+		float radius = 60.0f;
+		#endif
+
+		int width, height;
+		gWindow->GetDimensions(width, height);
+		gSceneCamera.SetLens(0.25f * XM_PI, static_cast<float>(width) / height, 1.0f, 1000.0f);
+		gSceneCamera.LookAt(XMFLOAT3(0, 18, -60), XMFLOAT3(0, 18, -59), XMFLOAT3(0.0f, 1.0f, 0.0f));
+		gSceneCamera.UpdateViewMatrix();
+
 		MSG msg = {};
 		while (msg.message != WM_QUIT)
 		{
@@ -77,17 +244,33 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE prevInstance,
 				DispatchMessage(&msg);
 			}
 
-			core->testrender();
+			#ifdef BENCHMARK
+			//if (timer.TotalTime() * 1000 > 20.0f)
+			//	break;
+
+			// Convert Spherical to Cartesian coordinates.
+			theta += timer.DeltaTime() * 500;
+			float x = radius * sinf(phi)*cosf(theta);
+			float z = radius * sinf(phi)*sinf(theta);
+			float y = radius * cosf(phi);
+			gSceneCamera.LookAt(XMFLOAT3(x, y, z), XMFLOAT3(0.0f, 0.0f, 0.0f), XMFLOAT3(0.0f, 1.0f, 0.0f));
+			#endif
+
 			timer.Tick();
-			CalculateFrameStats(timer, window.getHandle());
+			gSceneCamera.UpdateViewMatrix();
+			gGraphicsCore->testrender(gSceneCamera);
+
+			#ifndef BENCHMARK
+			CalculateFrameStats(timer, gWindow->getHandle());
+			#endif
 		}
 
 	}
 	
-
 	Spectral::Graphics::GraphicsCore::DestroyGraphicsCoreInstance();
 	gGeometries.clear();
 	gAllRitems.clear();
+	gTextures.clear();
 
 #ifndef RELEASE
 	IDXGIDebug1* pDebug = nullptr;
@@ -100,18 +283,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE prevInstance,
 
 	return 0;
 }
-
-
-/*
-// WINDOW CREATION
-Microsoft::WRL::Wrappers::RoInitializeWrapper InitializeWinRT(RO_INIT_MULTITHREADED);
-ASSERT_SUCCEEDED(InitializeWinRT);
-
-HINSTANCE hInst = GetModuleHandle(0);
-// END
-
-*/
-
 
 void CalculateFrameStats(Timer& timer, HWND hWnd)
 {
@@ -144,15 +315,6 @@ void CalculateFrameStats(Timer& timer, HWND hWnd)
 		timeElapsed += delta;
 	}
 }
-
-
-
-
-
-
-
-
-
 
 void BuildShapeGeometry()
 {
@@ -262,10 +424,10 @@ void BuildShapeGeometry()
 	ASSERT_HR(D3DCreateBlob(ibByteSize, &geo->IndexBufferCPU));
 	CopyMemory(geo->IndexBufferCPU->GetBufferPointer(), indices.data(), ibByteSize);
 
-	geo->VertexBufferGPU = /*d3dUtil::*/core->CreateDefaultBuffer(/*md3dDevice.Get(),
+	geo->VertexBufferGPU = /*d3dUtil::*/gGraphicsCore->CreateDefaultBuffer(/*md3dDevice.Get(),
 		mCommandList.Get(), */vertices.data(), vbByteSize, geo->VertexBufferUploader);
 
-	geo->IndexBufferGPU = /*d3dUtil::*/core->CreateDefaultBuffer(/*md3dDevice.Get(),
+	geo->IndexBufferGPU = /*d3dUtil::*/gGraphicsCore->CreateDefaultBuffer(/*md3dDevice.Get(),
 		mCommandList.Get(), */indices.data(), ibByteSize, geo->IndexBufferUploader);
 
 	geo->DisposeUploaders();
@@ -290,7 +452,7 @@ void BuildRenderItems()
 	XMStoreFloat4x4(&boxRitem->World, XMMatrixScaling(2.0f, 2.0f, 2.0f)*XMMatrixTranslation(0.0f, 1.0f, 0.0f));
 	XMStoreFloat4x4(&boxRitem->TexTransform, XMMatrixScaling(0.3f, 0.3f, 0.3f));
 	//boxRitem->ObjCBIndex = 0;
-	boxRitem->Mat = mMaterials["stone0"].get();
+	boxRitem->Mat = gMaterials["stone0"].get();
 	boxRitem->Geo = gGeometries["shapeGeo"].get();
 	boxRitem->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 	boxRitem->IndexCount = boxRitem->Geo->DrawArgs["box"].IndexCount;
@@ -303,7 +465,7 @@ void BuildRenderItems()
 	XMStoreFloat4x4(&gridRitem->TexTransform, XMMatrixScaling(8.0f, 8.0f, 1.0f));
 	//XMStoreFloat4x4(&gridRitem->TexTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
 	//gridRitem->ObjCBIndex = 1;
-	gridRitem->Mat = mMaterials["tile0"].get();
+	gridRitem->Mat = gMaterials["tile0"].get();
 	gridRitem->Geo = gGeometries["shapeGeo"].get();
 	gridRitem->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 	gridRitem->IndexCount = gridRitem->Geo->DrawArgs["grid"].IndexCount;
@@ -323,10 +485,10 @@ void BuildRenderItems()
 	XMStoreFloat4x4(&rightWallRItem->World, XMMatrixRotationZ(-XM_PI / 2)*XMMatrixRotationX(XM_PI/2)*XMMatrixTranslation(-15.0f, 15.0f, 0.0f));
 	XMStoreFloat4x4(&frontWallRItem->World, XMMatrixRotationX(-XM_PI / 2)*XMMatrixRotationZ(XM_PI)*XMMatrixTranslation(0.0f, 15.0f, 15.0f));
 	XMStoreFloat4x4(&backWallRItem->World, XMMatrixRotationX(XM_PI / 2)*XMMatrixRotationZ(0)*XMMatrixTranslation(0.0f, 15.0f, -15.0f));
-	leftWallRItem->Mat = mMaterials["bricks0"].get();
-	rightWallRItem->Mat = mMaterials["bricks0"].get();
-	frontWallRItem->Mat = mMaterials["bricks0"].get();
-	backWallRItem->Mat = mMaterials["bricks0"].get();
+	leftWallRItem->Mat = gMaterials["bricks0"].get();
+	rightWallRItem->Mat = gMaterials["bricks0"].get();
+	frontWallRItem->Mat = gMaterials["bricks0"].get();
+	backWallRItem->Mat = gMaterials["bricks0"].get();
 
 	XMStoreFloat4x4(&leftWallRItem->TexTransform, XMMatrixRotationZ(0)*XMMatrixScaling(2.0f, 2.0f, 2.0f));
 	XMStoreFloat4x4(&rightWallRItem->TexTransform, XMMatrixRotationZ(0)*XMMatrixScaling(2.0f, 2.0f, 2.0f));
@@ -335,10 +497,10 @@ void BuildRenderItems()
 
 
 	gAllRitems.push_back(std::move(gridRitem));
-	gAllRitems.push_back(std::move(leftWallRItem));
-	gAllRitems.push_back(std::move(rightWallRItem));
-	gAllRitems.push_back(std::move(frontWallRItem));
-	gAllRitems.push_back(std::move(backWallRItem));
+	//gAllRitems.push_back(std::move(leftWallRItem));
+	//gAllRitems.push_back(std::move(rightWallRItem));
+	//gAllRitems.push_back(std::move(frontWallRItem));
+	//gAllRitems.push_back(std::move(backWallRItem));
 
 	XMMATRIX brickTexTransform = XMMatrixScaling(1.0f, 1.0f, 1.0f);
 	UINT objCBIndex = 2;
@@ -358,7 +520,7 @@ void BuildRenderItems()
 		XMStoreFloat4x4(&leftCylRitem->World, rightCylWorld);
 		XMStoreFloat4x4(&leftCylRitem->TexTransform, brickTexTransform);
 		//leftCylRitem->ObjCBIndex = objCBIndex++;
-		leftCylRitem->Mat = mMaterials["bricks0"].get();
+		leftCylRitem->Mat = gMaterials["bricks0"].get();
 		leftCylRitem->Geo = gGeometries["shapeGeo"].get();
 		leftCylRitem->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 		leftCylRitem->IndexCount = leftCylRitem->Geo->DrawArgs["cylinder"].IndexCount;
@@ -368,7 +530,7 @@ void BuildRenderItems()
 		XMStoreFloat4x4(&rightCylRitem->World, leftCylWorld);
 		XMStoreFloat4x4(&rightCylRitem->TexTransform, brickTexTransform);
 		//rightCylRitem->ObjCBIndex = objCBIndex++;
-		rightCylRitem->Mat = mMaterials["bricks0"].get();
+		rightCylRitem->Mat = gMaterials["bricks0"].get();
 		rightCylRitem->Geo = gGeometries["shapeGeo"].get();
 		rightCylRitem->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 		rightCylRitem->IndexCount = rightCylRitem->Geo->DrawArgs["cylinder"].IndexCount;
@@ -378,7 +540,7 @@ void BuildRenderItems()
 		XMStoreFloat4x4(&leftSphereRitem->World, leftSphereWorld);
 		leftSphereRitem->TexTransform = Spectral::Math::XMF4x4Identity();
 		//leftSphereRitem->ObjCBIndex = objCBIndex++;
-		leftSphereRitem->Mat = mMaterials["stone0"].get();
+		leftSphereRitem->Mat = gMaterials["stone0"].get();
 		leftSphereRitem->Geo = gGeometries["shapeGeo"].get();
 		leftSphereRitem->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 		leftSphereRitem->IndexCount = leftSphereRitem->Geo->DrawArgs["sphere"].IndexCount;
@@ -388,7 +550,7 @@ void BuildRenderItems()
 		XMStoreFloat4x4(&rightSphereRitem->World, rightSphereWorld);
 		rightSphereRitem->TexTransform = Spectral::Math::XMF4x4Identity();
 		//rightSphereRitem->ObjCBIndex = objCBIndex++;
-		rightSphereRitem->Mat = mMaterials["stone0"].get();
+		rightSphereRitem->Mat = gMaterials["stone0"].get();
 		rightSphereRitem->Geo = gGeometries["shapeGeo"].get();
 		rightSphereRitem->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 		rightSphereRitem->IndexCount = rightSphereRitem->Geo->DrawArgs["sphere"].IndexCount;
@@ -401,12 +563,48 @@ void BuildRenderItems()
 		gAllRitems.push_back(std::move(rightSphereRitem));
 	}
 
-	//core->SubmitRenderPackets(mAllRitems);
+
 	// All the render items are opaque.
 	std::vector<RenderPacket*> packets;
 	for (auto& e : gAllRitems)
 		packets.push_back(e.get());
-	core->SubmitRenderPackets(packets);
+
+	// Quick and dirty way to duplicate the scene on the X and Z axis
+	for (RenderPacket* packet : packets)
+	{
+		for (int i = -4; i < 5; ++i)
+		{
+			if (i == 0)
+				continue;
+
+			auto temp = std::make_unique<RenderPacket>();
+			*temp = *packet;
+			XMStoreFloat4x4(&temp->World, XMLoadFloat4x4(&temp->World)*XMMatrixTranslation(30.0f * i, 0.0f, 0.0f));
+			gAllRitems.push_back(std::move(temp));
+		}
+	}
+	packets.clear();
+	for (auto& e : gAllRitems)
+		packets.push_back(e.get());
+
+	for (RenderPacket* packet : packets)
+	{
+		for (int i = -4; i < 5; ++i)
+		{
+			if (i == 0)
+				continue;
+
+			auto temp = std::make_unique<RenderPacket>();
+			*temp = *packet;
+			XMStoreFloat4x4(&temp->World, XMLoadFloat4x4(&temp->World)*XMMatrixTranslation(0.0f, 0.0f, 30.0f * i));
+			gAllRitems.push_back(std::move(temp));
+		}
+	}
+	packets.clear();
+	for (auto& e : gAllRitems)
+		packets.push_back(e.get());
+
+	gGraphicsCore->SubmitRenderPackets(packets);
 }
 
 void BuildMaterials()
@@ -432,8 +630,8 @@ void BuildMaterials()
 	temp.push_back(tileTex.get());
 
 	std::vector<short> indicies;
-	core->LoadTextures(temp);
-	core->SubmitSceneTextures(temp, indicies);
+	gGraphicsCore->LoadTextures(temp);
+	gGraphicsCore->SubmitSceneTextures(temp, indicies);
 
 	gTextures[bricksTex->Name] = std::move(bricksTex);
 	gTextures[stoneTex->Name] = std::move(stoneTex);
@@ -470,281 +668,69 @@ void BuildMaterials()
 	tile0->FresnelR0 = XMFLOAT3(0.02f, 0.02f, 0.02f);
 	tile0->Roughness = 0.2f;
 
-	mMaterials["bricks0"] = std::move(bricks0);
-	mMaterials["stone0"] = std::move(stone0);
-	mMaterials["tile0"] = std::move(tile0);
+	gMaterials["bricks0"] = std::move(bricks0);
+	gMaterials["stone0"] = std::move(stone0);
+	gMaterials["tile0"] = std::move(tile0);
 }
 
-//void TexColumnsApp::LoadTextures()
-//{
-//	auto bricksTex = std::make_unique<Texture>();
-//	bricksTex->Name = "bricksTex";
-//	bricksTex->Filename = L"../../Textures/bricks.dds";
-//	ThrowIfFailed(DirectX::CreateDDSTextureFromFile12(md3dDevice.Get(),
-//		mCommandList.Get(), bricksTex->Filename.c_str(),
-//		bricksTex->Resource, bricksTex->UploadHeap));
-//
-//	auto stoneTex = std::make_unique<Texture>();
-//	stoneTex->Name = "stoneTex";
-//	stoneTex->Filename = L"../../Textures/stone.dds";
-//	ThrowIfFailed(DirectX::CreateDDSTextureFromFile12(md3dDevice.Get(),
-//		mCommandList.Get(), stoneTex->Filename.c_str(),
-//		stoneTex->Resource, stoneTex->UploadHeap));
-//
-//	auto tileTex = std::make_unique<Texture>();
-//	tileTex->Name = "tileTex";
-//	tileTex->Filename = L"../../Textures/tile.dds";
-//	ThrowIfFailed(DirectX::CreateDDSTextureFromFile12(md3dDevice.Get(),
-//		mCommandList.Get(), tileTex->Filename.c_str(),
-//		tileTex->Resource, tileTex->UploadHeap));
-//
-//	mTextures[bricksTex->Name] = std::move(bricksTex);
-//	mTextures[stoneTex->Name] = std::move(stoneTex);
-//	mTextures[tileTex->Name] = std::move(tileTex);
-//}
+void OnMouseDown(WPARAM btnState, int x, int y)
+{
+	gLastMousePos.x = x;
+	gLastMousePos.y = y;
 
+	SetCapture(gWindow->getHandle());
+}
 
+void OnMouseUp(WPARAM btnState, int x, int y)
+{
+	ReleaseCapture();
+}
 
+void OnMouseMove(WPARAM btnState, int x, int y)
+{
+	if ((btnState & MK_LBUTTON) != 0)
+	{
+		float dx = (x - gLastMousePos.x) / 600.0f;
+		float dy = (y - gLastMousePos.y) / 800.0f;
+		
+		// Rotate by the opposite of the desired angle to
+		// emulate the effect of dragging the scene around.
+		gSceneCamera.RotateY(-dx);
+		gSceneCamera.RotateX(-dy);
 
+		gRotateX += -dy;
+	}
+	else if ((btnState & MK_RBUTTON) != 0)
+	{
+		float dx = 0.05f*static_cast<float>(x - gLastMousePos.x);
+		float dy = 0.05f*static_cast<float>(y - gLastMousePos.y);
 
+		XMFLOAT3 pos = gSceneCamera.GetPosition3f();
+		pos.y += dy;
+		gSceneCamera.SetPosition(pos);
+		// gSceneCamera.Strafe(-dx); // Inverted for dragging effect
+	}
+	else if ((btnState & MK_MBUTTON) != 0)
+	{
+		float dx = 0.05f*static_cast<float>(x - gLastMousePos.x);
+		float dy = 0.05f*static_cast<float>(y - gLastMousePos.y);
 
+		// Move the camera in such a fashion that the World Y-axis is the up vector for the camera
+		gSceneCamera.RotateX(-gRotateX);
+		gSceneCamera.Walk(dy);
+		gSceneCamera.Strafe(-dx); // Inverted for dragging effect
+		gSceneCamera.RotateX(gRotateX);
+	}
 
+	gLastMousePos.x = x;
+	gLastMousePos.y = y;
+}
 
+/*
+// WINDOW CREATION
+Microsoft::WRL::Wrappers::RoInitializeWrapper InitializeWinRT(RO_INIT_MULTITHREADED);
+ASSERT_SUCCEEDED(InitializeWinRT);
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-//void GraphicsCore::Render()
-//{
-//	Microsoft::WRL::ComPtr<ID3DBlob> mvsByteCode = d3dUtil::CompileShader(L"TEMP\\Shapes\\color.hlsl", nullptr, "VS", "vs_5_0");
-//	Microsoft::WRL::ComPtr<ID3DBlob> mpsByteCode = d3dUtil::CompileShader(L"TEMP\\Shapes\\color.hlsl", nullptr, "PS", "ps_5_0");
-//	// Shader programs typically require resources as input (constant buffers,
-//	// textures, samplers).  The root signature defines the resources the shader
-//	// programs expect.  If we think of the shader programs as a function, and
-//	// the input resources as function parameters, then the root signature can be
-//	// thought of as defining the function signature.  
-//
-//	// Root parameter can be a table, root descriptor or root constants.
-//	CD3DX12_ROOT_PARAMETER slotRootParameter[1];
-//
-//	// Create a single descriptor table of CBVs.
-//	CD3DX12_DESCRIPTOR_RANGE cbvTable;
-//	cbvTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0);
-//	slotRootParameter[0].InitAsDescriptorTable(1, &cbvTable);
-//
-//	// A root signature is an array of root parameters.
-//	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(1, slotRootParameter, 0, nullptr,
-//		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
-//
-//	// create a root signature with a single slot which points to a descriptor range consisting of a single constant buffer
-//	Microsoft::WRL::ComPtr<ID3DBlob> serializedRootSig = nullptr;
-//	Microsoft::WRL::ComPtr<ID3DBlob> errorBlob = nullptr;
-//	HRESULT hr = D3D12SerializeRootSignature(&rootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1,
-//		serializedRootSig.GetAddressOf(), errorBlob.GetAddressOf());
-//
-//	Microsoft::WRL::ComPtr<ID3D12RootSignature> mRootSignature;
-//	if (errorBlob != nullptr)
-//	{
-//		::OutputDebugStringA((char*)errorBlob->GetBufferPointer());
-//	}
-//	ASSERT_HR(hr);
-//
-//	ASSERT_HR(md3dDevice->CreateRootSignature(
-//		0,
-//		serializedRootSig->GetBufferPointer(),
-//		serializedRootSig->GetBufferSize(),
-//		IID_PPV_ARGS(&mRootSignature)));
-//
-//	std::vector<D3D12_INPUT_ELEMENT_DESC> mInputLayout =
-//	{
-//		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-//		{ "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
-//	};
-//
-//	D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc;
-//	ZeroMemory(&psoDesc, sizeof(D3D12_GRAPHICS_PIPELINE_STATE_DESC));
-//	psoDesc.InputLayout = { mInputLayout.data(), (UINT)mInputLayout.size() };
-//	psoDesc.pRootSignature = mRootSignature.Get();
-//	psoDesc.VS =
-//	{
-//		reinterpret_cast<BYTE*>(mvsByteCode->GetBufferPointer()),
-//		mvsByteCode->GetBufferSize()
-//	};
-//	psoDesc.PS =
-//	{
-//		reinterpret_cast<BYTE*>(mpsByteCode->GetBufferPointer()),
-//		mpsByteCode->GetBufferSize()
-//	};
-//
-//	Microsoft::WRL::ComPtr<ID3D12PipelineState> mPSO;
-//	psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
-//	psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
-//	psoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
-//	psoDesc.SampleMask = UINT_MAX;
-//	psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-//	psoDesc.NumRenderTargets = 1;
-//	psoDesc.RTVFormats[0] = mBackBufferFormat;
-//	psoDesc.SampleDesc.Count = 1;// m4xMsaaState ? 4 : 1;
-//	psoDesc.SampleDesc.Quality = 0;// m4xMsaaState ? (m4xMsaaQuality - 1) : 0;
-//	psoDesc.DSVFormat = mDepthStencilFormat;
-//	ASSERT_HR(md3dDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&mPSO)));
-//	FlushCommandQueue();
-//
-//	// Reuse the memory associated with command recording.
-//	// We can only reset when the associated command lists have finished execution on the GPU.
-//	ASSERT_HR(mDirectCmdListAlloc->Reset());
-//
-//	// A command list can be reset after it has been added to the command queue via ExecuteCommandList.
-//	// Reusing the command list reuses memory.
-//	ASSERT_HR(mCommandList->Reset(mDirectCmdListAlloc.Get(), mPSO.Get()));
-//
-//	mCommandList->RSSetViewports(1, &mScreenViewport);
-//	mCommandList->RSSetScissorRects(1, &mScissorRect);
-//
-//	// Indicate a state transition on the resource usage.
-//	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mSwapChainBuffer[mCurrBackBuffer].Get(),
-//		D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
-//	FlushCommandQueue();
-//	// Clear the back buffer and depth buffer.
-//	mCommandList->ClearRenderTargetView(CD3DX12_CPU_DESCRIPTOR_HANDLE(
-//		mRtvHeap->GetCPUDescriptorHandleForHeapStart(),
-//		mCurrBackBuffer,
-//		mRtvDescriptorSize), DirectX::Colors::LightSteelBlue, 0, nullptr);
-//	mCommandList->ClearDepthStencilView(mDsvHeap->GetCPUDescriptorHandleForHeapStart(), D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
-//
-//	// Specify the buffers we are going to render to.
-//	mCommandList->OMSetRenderTargets(1, &CD3DX12_CPU_DESCRIPTOR_HANDLE(
-//		mRtvHeap->GetCPUDescriptorHandleForHeapStart(),
-//		mCurrBackBuffer,
-//		mRtvDescriptorSize), true, &mDsvHeap->GetCPUDescriptorHandleForHeapStart());
-//	FlushCommandQueue();
-//	std::unique_ptr<MeshGeometry> mBoxGeo;
-//	std::array<Vertex, 8> vertices =
-//	{
-//		Vertex({ DirectX::XMFLOAT3(-1.0f, -1.0f, -1.0f), DirectX::XMFLOAT4(DirectX::Colors::White) }),
-//		Vertex({ DirectX::XMFLOAT3(-1.0f, +1.0f, -1.0f), DirectX::XMFLOAT4(DirectX::Colors::Black) }),
-//		Vertex({ DirectX::XMFLOAT3(+1.0f, +1.0f, -1.0f), DirectX::XMFLOAT4(DirectX::Colors::Red) }),
-//		Vertex({ DirectX::XMFLOAT3(+1.0f, -1.0f, -1.0f), DirectX::XMFLOAT4(DirectX::Colors::Green) }),
-//		Vertex({ DirectX::XMFLOAT3(-1.0f, -1.0f, +1.0f), DirectX::XMFLOAT4(DirectX::Colors::Blue) }),
-//		Vertex({ DirectX::XMFLOAT3(-1.0f, +1.0f, +1.0f), DirectX::XMFLOAT4(DirectX::Colors::Yellow) }),
-//		Vertex({ DirectX::XMFLOAT3(+1.0f, +1.0f, +1.0f), DirectX::XMFLOAT4(DirectX::Colors::Cyan) }),
-//		Vertex({ DirectX::XMFLOAT3(+1.0f, -1.0f, +1.0f), DirectX::XMFLOAT4(DirectX::Colors::Magenta) })
-//	};
-//
-//	std::array<std::uint16_t, 36> indices =
-//	{
-//		// front face
-//		0, 1, 2,
-//		0, 2, 3,
-//
-//		// back face
-//		4, 6, 5,
-//		4, 7, 6,
-//
-//		// left face
-//		4, 5, 1,
-//		4, 1, 0,
-//
-//		// right face
-//		3, 2, 6,
-//		3, 6, 7,
-//
-//		// top face
-//		1, 5, 6,
-//		1, 6, 2,
-//
-//		// bottom face
-//		4, 0, 3,
-//		4, 3, 7
-//	};
-//	const UINT vbByteSize = (UINT)vertices.size() * sizeof(Vertex);
-//	const UINT ibByteSize = (UINT)indices.size() * sizeof(std::uint16_t);
-//
-//	mBoxGeo = std::make_unique<MeshGeometry>();
-//	mBoxGeo->Name = "boxGeo";
-//
-//	ThrowIfFailed(D3DCreateBlob(vbByteSize, &mBoxGeo->VertexBufferCPU));
-//	CopyMemory(mBoxGeo->VertexBufferCPU->GetBufferPointer(), vertices.data(), vbByteSize);
-//
-//	ThrowIfFailed(D3DCreateBlob(ibByteSize, &mBoxGeo->IndexBufferCPU));
-//	CopyMemory(mBoxGeo->IndexBufferCPU->GetBufferPointer(), indices.data(), ibByteSize);
-//
-//	mBoxGeo->VertexBufferGPU = d3dUtil::CreateDefaultBuffer(md3dDevice.Get(),
-//		mCommandList.Get(), vertices.data(), vbByteSize, mBoxGeo->VertexBufferUploader);
-//
-//	mBoxGeo->IndexBufferGPU = d3dUtil::CreateDefaultBuffer(md3dDevice.Get(),
-//		mCommandList.Get(), indices.data(), ibByteSize, mBoxGeo->IndexBufferUploader);
-//
-//	mBoxGeo->VertexByteStride = sizeof(Vertex);
-//	mBoxGeo->VertexBufferByteSize = vbByteSize;
-//	mBoxGeo->IndexFormat = DXGI_FORMAT_R16_UINT;
-//	mBoxGeo->IndexBufferByteSize = ibByteSize;
-//
-//	SubmeshGeometry submesh;
-//	submesh.IndexCount = (UINT)indices.size();
-//	submesh.StartIndexLocation = 0;
-//	submesh.BaseVertexLocation = 0;
-//
-//	mBoxGeo->DrawArgs["box"] = submesh;
-//
-//
-//
-//	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> mCbvHeap;
-//	D3D12_DESCRIPTOR_HEAP_DESC cbvHeapDesc;
-//	cbvHeapDesc.NumDescriptors = 1;
-//	cbvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-//	cbvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-//	cbvHeapDesc.NodeMask = 0;
-//	ThrowIfFailed(md3dDevice->CreateDescriptorHeap(&cbvHeapDesc,
-//		IID_PPV_ARGS(&mCbvHeap)));
-//
-//	FlushCommandQueue();
-//	ID3D12DescriptorHeap* descriptorHeaps[] = { mCbvHeap.Get() };
-//	mCommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
-//
-//	mCommandList->SetGraphicsRootSignature(mRootSignature.Get());
-//
-//	mCommandList->IASetVertexBuffers(0, 1, &mBoxGeo->VertexBufferView());
-//	mCommandList->IASetIndexBuffer(&mBoxGeo->IndexBufferView());
-//	mCommandList->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-//
-//	mCommandList->SetGraphicsRootDescriptorTable(0, mCbvHeap->GetGPUDescriptorHandleForHeapStart());
-//	FlushCommandQueue();
-//	mCommandList->DrawIndexedInstanced(
-//		mBoxGeo->DrawArgs["box"].IndexCount,
-//		1, 0, 0, 0);
-//	FlushCommandQueue();
-//	// Indicate a state transition on the resource usage.
-//	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mSwapChainBuffer[mCurrBackBuffer].Get(),
-//		D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
-//
-//	// Done recording commands.
-//	ThrowIfFailed(mCommandList->Close());
-//
-//	// Add the command list to the queue for execution.
-//	ID3D12CommandList* cmdsLists[] = { mCommandList.Get() };
-//	mCommandQueue->ExecuteCommandLists(_countof(cmdsLists), cmdsLists);
-//
-//	// swap the back and front buffers
-//	ThrowIfFailed(mSwapChain->Present(0, 0));
-//	mCurrBackBuffer = (mCurrBackBuffer + 1) % SWAP_CHAIN_BUFFER_COUNT;
-//
-//	// Wait until frame commands are complete.  This waiting is inefficient and is
-//	// done for simplicity.  Later we will show how to organize our rendering code
-//	// so we do not have to wait per frame.
-//	FlushCommandQueue();
-//}
+HINSTANCE hInst = GetModuleHandle(0);
+// END
+*/
