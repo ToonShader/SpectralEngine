@@ -26,7 +26,8 @@ struct Material
 	int DiffuseSrvHeapIndex = -1;
 
 	// Index into SRV heap for normal texture.
-	//int NormalSrvHeapIndex = -1;
+	// (Currently only used to indicate presence of a normal map)
+	int NormalMapSrvHeapIndex = -1;
 
 	//int NumFramesDirty = gNumFrameResources;
 

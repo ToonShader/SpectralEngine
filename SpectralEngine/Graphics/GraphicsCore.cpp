@@ -264,11 +264,11 @@ void GraphicsCore::testrender(const Camera& camera)
 	// Reusing the command list reuses memory.
 	if (mIsWireframe)
 	{
-		ASSERT_HR(mCommandList->Reset(cmdListAlloc.Get(), mPSOs["opaque_wireframe"].Get()));
+		ASSERT_HR(mCommandList->Reset(cmdListAlloc.Get(), mPSOs["Opaque_NormMap_Wireframe"].Get()));
 	}
 	else
 	{
-		ASSERT_HR(mCommandList->Reset(cmdListAlloc.Get(), mPSOs["opaque"].Get()));
+		ASSERT_HR(mCommandList->Reset(cmdListAlloc.Get(), mPSOs["Opaque_NormMap"].Get()));
 	}
 
 	mCommandList->RSSetViewports(1, &mScreenViewport);
@@ -764,7 +764,7 @@ void GraphicsCore::BuildDescriptorHeaps()
 
 	// Create the SRV heap for textures.
 	D3D12_DESCRIPTOR_HEAP_DESC srvHeapDesc = {};
-	srvHeapDesc.NumDescriptors = 3;
+	srvHeapDesc.NumDescriptors = 3 + 3; // 3 textures + 3 normal maps (will be configurable soon)
 	srvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 	srvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 	ASSERT_HR(md3dDevice->CreateDescriptorHeap(&srvHeapDesc, IID_PPV_ARGS(&mSrvDescriptorHeap)));
@@ -851,7 +851,7 @@ void GraphicsCore::BuildPSOs()
 {
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC opaquePsoDesc;
 
-	// PSO for opaque objects.
+	// PSO for standard opaque objects.
 	ZeroMemory(&opaquePsoDesc, sizeof(D3D12_GRAPHICS_PIPELINE_STATE_DESC));
 	opaquePsoDesc.InputLayout = { mInputLayout.data(), (UINT)mInputLayout.size() };
 	opaquePsoDesc.pRootSignature = mRootSignature.Get();
@@ -876,12 +876,32 @@ void GraphicsCore::BuildPSOs()
 	opaquePsoDesc.SampleDesc.Count = 1;// m4xMsaaState ? 4 : 1;
 	opaquePsoDesc.SampleDesc.Quality = 0;// m4xMsaaState ? (m4xMsaaQuality - 1) : 0;
 	opaquePsoDesc.DSVFormat = mDepthStencilFormat;
-	ASSERT_HR(md3dDevice->CreateGraphicsPipelineState(&opaquePsoDesc, IID_PPV_ARGS(&mPSOs["opaque"])));
+	ASSERT_HR(md3dDevice->CreateGraphicsPipelineState(&opaquePsoDesc, IID_PPV_ARGS(&mPSOs["Opaque"])));
 
-	// PSO for opaque wireframe objects.
+	// PSO for standard opaque wireframe objects.
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC opaqueWireframePsoDesc = opaquePsoDesc;
 	opaqueWireframePsoDesc.RasterizerState.FillMode = D3D12_FILL_MODE_WIREFRAME;
-	ASSERT_HR(md3dDevice->CreateGraphicsPipelineState(&opaqueWireframePsoDesc, IID_PPV_ARGS(&mPSOs["opaque_wireframe"])));
+	ASSERT_HR(md3dDevice->CreateGraphicsPipelineState(&opaqueWireframePsoDesc, IID_PPV_ARGS(&mPSOs["Opaque_Wireframe"])));
+
+
+	// PSO for normal-mapped opaque objects
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC opaqueNormMapPsoDesc = opaquePsoDesc;
+	opaqueNormMapPsoDesc.VS =
+	{
+		reinterpret_cast<BYTE*>(mShaders["standardNormMapVS"]->GetBufferPointer()),
+		mShaders["standardNormMapVS"]->GetBufferSize()
+	};
+	opaqueNormMapPsoDesc.PS =
+	{
+		reinterpret_cast<BYTE*>(mShaders["opaqueNormMapPS"]->GetBufferPointer()),
+		mShaders["opaqueNormMapPS"]->GetBufferSize()
+	};
+	ASSERT_HR(md3dDevice->CreateGraphicsPipelineState(&opaqueNormMapPsoDesc, IID_PPV_ARGS(&mPSOs["Opaque_NormMap"])));
+
+	// PSO for normal-mapped opaque wireframe objects.
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC opaqueNormMapWireframePsoDesc = opaqueNormMapPsoDesc;
+	opaqueNormMapWireframePsoDesc.RasterizerState.FillMode = D3D12_FILL_MODE_WIREFRAME;
+	ASSERT_HR(md3dDevice->CreateGraphicsPipelineState(&opaqueNormMapWireframePsoDesc, IID_PPV_ARGS(&mPSOs["Opaque_NormMap_Wireframe"])));
 }
 
 void GraphicsCore::BuildFrameResources()
@@ -912,26 +932,30 @@ void GraphicsCore::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, ID3D12Com
 			
 			// We will be updating the CBs on the GPU, so execute previous commands
 			// which rely on the current values first.
-			ASSERT_HR(cmdList->Close());
-			ID3D12CommandList* cmdsLists[] = { cmdList };
-			mCommandQueue->ExecuteCommandLists(_countof(cmdsLists), cmdsLists);
+			if (i != 0)
+			{
+				ASSERT_HR(cmdList->Close());
+				ID3D12CommandList* cmdsLists[] = { cmdList };
+				mCommandQueue->ExecuteCommandLists(_countof(cmdsLists), cmdsLists);
 
 
-			FlushCommandQueue();
+				FlushCommandQueue();
+				ASSERT_HR(listAlloc->Reset()); // Optional, if we don't wan't the memory back
+
+				// A command list can be reset after it has been added to the command queue via ExecuteCommandList.
+				// Reusing the command list reuses memory.
+				if (mIsWireframe)
+				{
+					ASSERT_HR(cmdList->Reset(listAlloc, mPSOs["Opaque_NormMap_Wireframe"].Get()));
+				}
+				else
+				{
+					ASSERT_HR(cmdList->Reset(listAlloc, mPSOs["Opaque_NormMap"].Get()));
+				}
+			}
+
 			UpdateObjectCBs(ritems, i, NUM_CBUFFERS);
 			UpdateMaterialCBs(ritems, i, NUM_CBUFFERS);
-			ASSERT_HR(listAlloc->Reset()); // Optional, if we don't wan't the memory back
-
-			// A command list can be reset after it has been added to the command queue via ExecuteCommandList.
-			// Reusing the command list reuses memory.
-			if (mIsWireframe)
-			{
-				ASSERT_HR(cmdList->Reset(listAlloc, mPSOs["opaque_wireframe"].Get()));
-			}
-			else
-			{
-				ASSERT_HR(cmdList->Reset(listAlloc, mPSOs["opaque"].Get()));
-			}
 
 			cmdList->RSSetViewports(1, &mScreenViewport);
 			cmdList->RSSetScissorRects(1, &mScissorRect);
@@ -942,20 +966,24 @@ void GraphicsCore::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, ID3D12Com
 			// We can now specify all of the drawing related commands.
 		}
 		auto ri = ritems[i];
+		if (ritems[i]->Mat->NormalMapSrvHeapIndex < 0) // TODO: REMOVE normal map index if it will always be adjacent, or add toggleable support for disparate locations
+			if (mIsWireframe)
+				cmdList->SetPipelineState(mPSOs["Opaque_Wireframe"].Get());
+			else
+				cmdList->SetPipelineState(mPSOs["Opaque"].Get());
+		else
+			if (mIsWireframe)
+				cmdList->SetPipelineState(mPSOs["Opaque_NormMap_Wireframe"].Get());
+			else
+				cmdList->SetPipelineState(mPSOs["Opaque_NormMap"].Get());
 
+		// TODO: This should be refactor to consider that the buffers for the same mesh will be the same.
+		//			- Consider sorting objects by shader used, then by mesh.
 		cmdList->IASetVertexBuffers(0, 1, &ri->Geo->VertexBufferView());
 		cmdList->IASetIndexBuffer(&ri->Geo->IndexBufferView());
 		cmdList->IASetPrimitiveTopology(ri->PrimitiveType);
 
 		cmdList->SetGraphicsRootSignature(mRootSignature.Get());
-
-		ID3D12DescriptorHeap* texDescriptorHeaps[] = { mSrvDescriptorHeap.Get() }; //-------------TODO: MAKE WORK?
-		mCommandList->SetDescriptorHeaps(_countof(texDescriptorHeaps), texDescriptorHeaps);
-
-		CD3DX12_GPU_DESCRIPTOR_HANDLE tex(mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
-		tex.Offset(ri->Mat->DiffuseSrvHeapIndex, mCbvSrvUavDescriptorSize);
-
-		cmdList->SetGraphicsRootDescriptorTable(3, tex);
 
 		ID3D12DescriptorHeap* cbDescriptorHeaps[] = { mCbvHeap.Get() };
 		cmdList->SetDescriptorHeaps(_countof(cbDescriptorHeaps), cbDescriptorHeaps);
@@ -979,13 +1007,13 @@ void GraphicsCore::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, ID3D12Com
 
 		cmdList->SetGraphicsRootDescriptorTable(2, cbvHandle);
 
-		//ID3D12DescriptorHeap* texDescriptorHeaps[] = { mSrvDescriptorHeap.Get() }; //-------------TODO: MAKE WORK?
-		//mCommandList->SetDescriptorHeaps(_countof(texDescriptorHeaps), texDescriptorHeaps);
+		ID3D12DescriptorHeap* texDescriptorHeaps[] = { mSrvDescriptorHeap.Get() };
+		mCommandList->SetDescriptorHeaps(_countof(texDescriptorHeaps), texDescriptorHeaps);
 
-		//CD3DX12_GPU_DESCRIPTOR_HANDLE tex(mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
-		//tex.Offset(ri->Mat->DiffuseSrvHeapIndex, mCbvSrvUavDescriptorSize);
+		CD3DX12_GPU_DESCRIPTOR_HANDLE tex(mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+		tex.Offset(ri->Mat->DiffuseSrvHeapIndex, mCbvSrvUavDescriptorSize);
 
-		//cmdList->SetGraphicsRootDescriptorTable(3, tex);
+		cmdList->SetGraphicsRootDescriptorTable(3, tex);
 
 		cmdList->DrawIndexedInstanced(ri->IndexCount, 1, ri->StartIndexLocation, ri->BaseVertexLocation, 0);
 	}
@@ -1007,7 +1035,7 @@ void GraphicsCore::BuildRootSignature()
 	cbvTable2.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 2);
 
 	CD3DX12_DESCRIPTOR_RANGE texTable;
-	texTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
+	texTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 2, 0);
 
 	// Root parameter can be a table, root descriptor or root constants.
 	CD3DX12_ROOT_PARAMETER slotRootParameter[4];
@@ -1016,7 +1044,7 @@ void GraphicsCore::BuildRootSignature()
 	slotRootParameter[0].InitAsDescriptorTable(1, &cbvTable0); // PassCB
 	slotRootParameter[1].InitAsDescriptorTable(1, &cbvTable1); // MatCB
 	slotRootParameter[2].InitAsDescriptorTable(1, &cbvTable2); // ObjCB
-	slotRootParameter[3].InitAsDescriptorTable(1, &texTable, D3D12_SHADER_VISIBILITY_PIXEL); // texture
+	slotRootParameter[3].InitAsDescriptorTable(1, &texTable, D3D12_SHADER_VISIBILITY_PIXEL); // texture + normal
 
 	auto staticSamplers = GetStaticSamplers();
 
@@ -1044,12 +1072,15 @@ void GraphicsCore::BuildShadersAndInputLayout()
 {
 	mShaders["standardVS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "VS", "vs_4_0");
 	mShaders["opaquePS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "PS", "ps_4_0");
+	mShaders["standardNormMapVS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "VS_NormalMapped", "vs_4_0");
+	mShaders["opaqueNormMapPS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "PS_NormalMapped", "ps_4_0");
 
 	mInputLayout =
 	{
 		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
 		{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-		{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 24, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
+		{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 24, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+		{ "TANGENT", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 32, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
 	};
 }
 
@@ -1187,6 +1218,7 @@ void GraphicsCore::SubmitSceneTextures(std::vector<Texture*>& texes, std::vector
 	// TODO: Need to establish policies for when a command list will be open or closed.
 	// Need to also consider using lists with separate uses to maximize GPU throughput.
 
+	// TODO: Move this as it does not make sense to perform here.
 	for (int i = 0; i < texes.size(); ++i)
 		texes[i]->UploadHeap = nullptr;
 }
