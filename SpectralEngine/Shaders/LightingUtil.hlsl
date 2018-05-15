@@ -46,7 +46,8 @@ float3 BlinnPhong(float3 lightStrength, float3 lightVec, float3 normal, float3 t
     const float m = mat.Shininess * 256.0f;
     float3 halfVec = normalize(toEye + lightVec);
 
-    float roughnessFactor = (m + 8.0f)*pow(max(dot(halfVec, normal), 0.0f), m) / 8.0f;
+	// If this resolves to pow(0, 0), the result will be NaN on certain hardware, so make it slightly above 0.
+    float roughnessFactor = (m + 8.0f)*pow(max(dot(halfVec, normal), 0.00001f), m) / 8.0f;
     float3 fresnelFactor = SchlickFresnel(mat.FresnelR0, halfVec, lightVec);
 
     float3 specAlbedo = fresnelFactor*roughnessFactor;
