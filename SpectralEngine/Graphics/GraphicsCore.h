@@ -32,6 +32,8 @@ namespace Spectral
 {
 	namespace Graphics
 	{
+		enum NamedPSO { Default, Default_WF, NormalMap, NormalMap_WF, Count };
+
 		// NOTE: Commented out functions, specifiers, and arguments are potential candidates for changes
 		// as this class is still being prototyped and designed.
 		class GraphicsCore
@@ -152,7 +154,7 @@ namespace Spectral
 			Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> mSrvDescriptorHeap = nullptr;
 
 			std::unordered_map<std::string, Microsoft::WRL::ComPtr<ID3DBlob>> mShaders;
-			std::unordered_map<std::string, Microsoft::WRL::ComPtr<ID3D12PipelineState>> mPSOs;
+			std::vector<Microsoft::WRL::ComPtr<ID3D12PipelineState>> mPSOs;
 
 			std::vector<D3D12_INPUT_ELEMENT_DESC> mInputLayout;
 

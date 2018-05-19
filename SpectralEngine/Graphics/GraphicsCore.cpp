@@ -264,11 +264,11 @@ void GraphicsCore::testrender(const Camera& camera)
 	// Reusing the command list reuses memory.
 	if (mIsWireframe)
 	{
-		ASSERT_HR(mCommandList->Reset(cmdListAlloc.Get(), mPSOs["Opaque_NormMap_Wireframe"].Get()));
+		ASSERT_HR(mCommandList->Reset(cmdListAlloc.Get(), mPSOs[NamedPSO::Default_WF].Get()));
 	}
 	else
 	{
-		ASSERT_HR(mCommandList->Reset(cmdListAlloc.Get(), mPSOs["Opaque_NormMap"].Get()));
+		ASSERT_HR(mCommandList->Reset(cmdListAlloc.Get(), mPSOs[NamedPSO::Default].Get()));
 	}
 
 	mCommandList->RSSetViewports(1, &mScreenViewport);
@@ -849,9 +849,10 @@ void GraphicsCore::BuildConstantBufferViews()
 
 void GraphicsCore::BuildPSOs()
 {
-	D3D12_GRAPHICS_PIPELINE_STATE_DESC opaquePsoDesc;
+	mPSOs.resize(NamedPSO::Count);
 
 	// PSO for standard opaque objects.
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC opaquePsoDesc;
 	ZeroMemory(&opaquePsoDesc, sizeof(D3D12_GRAPHICS_PIPELINE_STATE_DESC));
 	opaquePsoDesc.InputLayout = { mInputLayout.data(), (UINT)mInputLayout.size() };
 	opaquePsoDesc.pRootSignature = mRootSignature.Get();
@@ -876,12 +877,12 @@ void GraphicsCore::BuildPSOs()
 	opaquePsoDesc.SampleDesc.Count = 1;// m4xMsaaState ? 4 : 1;
 	opaquePsoDesc.SampleDesc.Quality = 0;// m4xMsaaState ? (m4xMsaaQuality - 1) : 0;
 	opaquePsoDesc.DSVFormat = mDepthStencilFormat;
-	ASSERT_HR(md3dDevice->CreateGraphicsPipelineState(&opaquePsoDesc, IID_PPV_ARGS(&mPSOs["Opaque"])));
+	ASSERT_HR(md3dDevice->CreateGraphicsPipelineState(&opaquePsoDesc, IID_PPV_ARGS(&mPSOs[NamedPSO::Default])));
 
 	// PSO for standard opaque wireframe objects.
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC opaqueWireframePsoDesc = opaquePsoDesc;
 	opaqueWireframePsoDesc.RasterizerState.FillMode = D3D12_FILL_MODE_WIREFRAME;
-	ASSERT_HR(md3dDevice->CreateGraphicsPipelineState(&opaqueWireframePsoDesc, IID_PPV_ARGS(&mPSOs["Opaque_Wireframe"])));
+	ASSERT_HR(md3dDevice->CreateGraphicsPipelineState(&opaqueWireframePsoDesc, IID_PPV_ARGS(&mPSOs[NamedPSO::Default_WF])));
 
 
 	// PSO for normal-mapped opaque objects
@@ -896,12 +897,12 @@ void GraphicsCore::BuildPSOs()
 		reinterpret_cast<BYTE*>(mShaders["opaqueNormMapPS"]->GetBufferPointer()),
 		mShaders["opaqueNormMapPS"]->GetBufferSize()
 	};
-	ASSERT_HR(md3dDevice->CreateGraphicsPipelineState(&opaqueNormMapPsoDesc, IID_PPV_ARGS(&mPSOs["Opaque_NormMap"])));
+	ASSERT_HR(md3dDevice->CreateGraphicsPipelineState(&opaqueNormMapPsoDesc, IID_PPV_ARGS(&mPSOs[NamedPSO::NormalMap])));
 
 	// PSO for normal-mapped opaque wireframe objects.
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC opaqueNormMapWireframePsoDesc = opaqueNormMapPsoDesc;
 	opaqueNormMapWireframePsoDesc.RasterizerState.FillMode = D3D12_FILL_MODE_WIREFRAME;
-	ASSERT_HR(md3dDevice->CreateGraphicsPipelineState(&opaqueNormMapWireframePsoDesc, IID_PPV_ARGS(&mPSOs["Opaque_NormMap_Wireframe"])));
+	ASSERT_HR(md3dDevice->CreateGraphicsPipelineState(&opaqueNormMapWireframePsoDesc, IID_PPV_ARGS(&mPSOs[NamedPSO::NormalMap_WF])));
 }
 
 void GraphicsCore::BuildFrameResources()
@@ -924,6 +925,7 @@ void GraphicsCore::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, ID3D12Com
 	//auto objectCB = mCurrFrameResource->ObjectCB->Resource();
 
 	// For each render item...
+	NamedPSO activePSO = NamedPSO::Default;
 	for (size_t i = 0; i < ritems.size(); ++i)
 	{
 		if (i % NUM_CBUFFERS == 0)
@@ -946,11 +948,13 @@ void GraphicsCore::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, ID3D12Com
 				// Reusing the command list reuses memory.
 				if (mIsWireframe)
 				{
-					ASSERT_HR(cmdList->Reset(listAlloc, mPSOs["Opaque_NormMap_Wireframe"].Get()));
+					activePSO = NamedPSO::Default_WF;
+					ASSERT_HR(cmdList->Reset(listAlloc, mPSOs[activePSO].Get()));
 				}
 				else
 				{
-					ASSERT_HR(cmdList->Reset(listAlloc, mPSOs["Opaque_NormMap"].Get()));
+					activePSO = NamedPSO::Default;
+					ASSERT_HR(cmdList->Reset(listAlloc, mPSOs[activePSO].Get()));
 				}
 			}
 
@@ -965,17 +969,35 @@ void GraphicsCore::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, ID3D12Com
 
 			// We can now specify all of the drawing related commands.
 		}
+
+		// Set PSO required to draw the object
 		auto ri = ritems[i];
 		if (ritems[i]->Mat->NormalMapSrvHeapIndex < 0) // TODO: REMOVE normal map index if it will always be adjacent, or add toggleable support for disparate locations
-			if (mIsWireframe)
-				cmdList->SetPipelineState(mPSOs["Opaque_Wireframe"].Get());
-			else
-				cmdList->SetPipelineState(mPSOs["Opaque"].Get());
+		{ 
+			if (mIsWireframe && activePSO != NamedPSO::Default_WF)
+			{
+				activePSO = NamedPSO::Default_WF;
+				cmdList->SetPipelineState(mPSOs[activePSO].Get());
+			}
+			else if (activePSO != NamedPSO::Default)
+			{
+				activePSO = NamedPSO::Default;
+				cmdList->SetPipelineState(mPSOs[activePSO].Get());
+			}
+		}
 		else
-			if (mIsWireframe)
-				cmdList->SetPipelineState(mPSOs["Opaque_NormMap_Wireframe"].Get());
-			else
-				cmdList->SetPipelineState(mPSOs["Opaque_NormMap"].Get());
+		{
+			if (mIsWireframe && activePSO != NamedPSO::NormalMap_WF)
+			{
+				activePSO = NamedPSO::NormalMap_WF;
+				cmdList->SetPipelineState(mPSOs[activePSO].Get());
+			}
+			else if (activePSO != NamedPSO::NormalMap)
+			{
+				activePSO = NamedPSO::NormalMap;
+				cmdList->SetPipelineState(mPSOs[activePSO].Get());
+			}
+		}
 
 		// TODO: This should be refactor to consider that the buffers for the same mesh will be the same.
 		//			- Consider sorting objects by shader used, then by mesh.
