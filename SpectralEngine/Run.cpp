@@ -13,6 +13,7 @@
 #include "Microsoft\DDSTextureLoader.h"
 #include <string>
 #include <cstdlib>
+#include <fstream>
 
 
 #ifndef RELEASE
@@ -213,8 +214,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE prevInstance,
 
 	// Scope the main message pump so that we can check for memory leaks and live objects afterwards
 	{
-		Timer timer;
-		timer.Reset();
 		gWindow = std::make_unique<WindowManager>(hInstance, L"Spectral Demo");
 		gWindow->InitWindow(800, 600, WndProc);
 		gGraphicsCore = Spectral::Graphics::GraphicsCore::GetGraphicsCoreInstance(gWindow->getHandle());
@@ -224,8 +223,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE prevInstance,
 
 		#ifdef BENCHMARK
 		gGraphicsCore->SetFullScreen(true);
-		float theta = 1.5f*3.14159;
-		float phi = 0.40f*3.14159;
+		float theta = 1.5f*XM_PI;
+		float phi = 0.40f*XM_PI;
 		float radius = 60.0f;
 		#endif
 
@@ -234,6 +233,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE prevInstance,
 		gSceneCamera.SetLens(0.25f * XM_PI, static_cast<float>(width) / height, 1.0f, 1000.0f);
 		gSceneCamera.LookAt(XMFLOAT3(0, 18, -60), XMFLOAT3(0, 18, -59), XMFLOAT3(0.0f, 1.0f, 0.0f));
 		gSceneCamera.UpdateViewMatrix();
+
+		Timer timer;
+		timer.Reset();
+
+		// Manually track FPS metrics for now
+		int numFrames = 0;
 
 		MSG msg = {};
 		while (msg.message != WM_QUIT)
@@ -245,11 +250,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE prevInstance,
 			}
 
 			#ifdef BENCHMARK
-			//if (timer.TotalTime() * 1000 > 20.0f)
-			//	break;
+			if (timer.TotalTime() > 20000.0f)
+				break;
 
 			// Convert Spherical to Cartesian coordinates.
-			theta += timer.DeltaTime() * 500;
+			theta += timer.DeltaTime() * 0.0005f;
 			float x = radius * sinf(phi)*cosf(theta);
 			float z = radius * sinf(phi)*sinf(theta);
 			float y = radius * cosf(phi);
@@ -263,8 +268,14 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE prevInstance,
 			#ifndef BENCHMARK
 			CalculateFrameStats(timer, gWindow->getHandle());
 			#endif
+
+			++numFrames;
 		}
 
+
+		std::ofstream file("fpsStats.txt");
+		file << numFrames;
+		file.close();
 	}
 	
 	Spectral::Graphics::GraphicsCore::DestroyGraphicsCoreInstance();
@@ -294,11 +305,11 @@ void CalculateFrameStats(Timer& timer, HWND hWnd)
 
 	frameCnt++;
 
-	float delta = timer.TotalTime() * 1000.0f - timeElapsed;
+	float delta = timer.TotalTime() - timeElapsed;
 	// Compute averages over one second period.
-	if (delta >= 1.0f)
+	if (delta >= 1000.0f)
 	{
-		float fps = (float)frameCnt / delta; // fps = frameCnt / 1
+		float fps = (float)frameCnt / (delta / 1000.0);
 		float mspf = 1000.0f / fps;
 
 		std::wstring fpsStr = std::to_wstring(fps);
@@ -383,6 +394,7 @@ void BuildShapeGeometry()
 		vertices[k].Position = box.Vertices[i].Position;
 		vertices[k].Normal = box.Vertices[i].Normal;// XMFLOAT4(DirectX::Colors::DarkGreen);
 		vertices[k].TexCoord = box.Vertices[i].TexC;
+		vertices[k].Tangent = box.Vertices[i].TangentU;
 	}
 
 	for (size_t i = 0; i < grid.Vertices.size(); ++i, ++k)
@@ -390,6 +402,7 @@ void BuildShapeGeometry()
 		vertices[k].Position = grid.Vertices[i].Position;
 		vertices[k].Normal = grid.Vertices[i].Normal; // XMFLOAT4(DirectX::Colors::ForestGreen);
 		vertices[k].TexCoord = grid.Vertices[i].TexC;
+		vertices[k].Tangent = grid.Vertices[i].TangentU;
 	}
 
 	for (size_t i = 0; i < sphere.Vertices.size(); ++i, ++k)
@@ -397,6 +410,7 @@ void BuildShapeGeometry()
 		vertices[k].Position = sphere.Vertices[i].Position;
 		vertices[k].Normal = sphere.Vertices[i].Normal; // XMFLOAT4(DirectX::Colors::Crimson);
 		vertices[k].TexCoord = sphere.Vertices[i].TexC;
+		vertices[k].Tangent = sphere.Vertices[i].TangentU;
 	}
 
 	for (size_t i = 0; i < cylinder.Vertices.size(); ++i, ++k)
@@ -404,6 +418,7 @@ void BuildShapeGeometry()
 		vertices[k].Position = cylinder.Vertices[i].Position;
 		vertices[k].Normal = cylinder.Vertices[i].Normal; // XMFLOAT4(DirectX::Colors::SteelBlue);
 		vertices[k].TexCoord = cylinder.Vertices[i].TexC;
+		vertices[k].Tangent = cylinder.Vertices[i].TangentU;
 	}
 
 	std::vector<std::uint16_t> indices;
@@ -450,7 +465,7 @@ void BuildRenderItems()
 
 	auto boxRitem = std::make_unique<RenderPacket>();
 	XMStoreFloat4x4(&boxRitem->World, XMMatrixScaling(2.0f, 2.0f, 2.0f)*XMMatrixTranslation(0.0f, 1.0f, 0.0f));
-	XMStoreFloat4x4(&boxRitem->TexTransform, XMMatrixScaling(0.3f, 0.3f, 0.3f));
+	//XMStoreFloat4x4(&boxRitem->TexTransform, XMMatrixScaling(0.3f, 0.3f, 0.3f));
 	//boxRitem->ObjCBIndex = 0;
 	boxRitem->Mat = gMaterials["stone0"].get();
 	boxRitem->Geo = gGeometries["shapeGeo"].get();
@@ -623,11 +638,28 @@ void BuildMaterials()
 	tileTex->Name = "tileTex";
 	tileTex->Filename = L"Textures/tile.dds";
 
+	// Load corresponding normal maps
+	auto bricksNorm = std::make_unique<Texture>();
+	bricksNorm->Name = "bricksNorm";
+	bricksNorm->Filename = L"Textures/bricks_nmap.dds";
+
+	// Currently there is no normal map for the stone texture
+	//auto stoneNorm = std::make_unique<Texture>();
+	//stoneNorm->Name = "stoneNorm";
+	//stoneNorm->Filename = L"Textures/bricks2_nmap.dds";
+
+	auto tileNorm = std::make_unique<Texture>();
+	tileNorm->Name = "tileNorm";
+	tileNorm->Filename = L"Textures/tile_nmap.dds";
+
 	// TODO: Redesign this interface
 	std::vector<Texture*> temp;
 	temp.push_back(bricksTex.get());
+	temp.push_back(bricksNorm.get());
 	temp.push_back(stoneTex.get());
+	//temp.push_back(stoneNorm.get());
 	temp.push_back(tileTex.get());
+	temp.push_back(tileNorm.get());
 
 	std::vector<short> indicies;
 	gGraphicsCore->LoadTextures(temp);
@@ -636,6 +668,9 @@ void BuildMaterials()
 	gTextures[bricksTex->Name] = std::move(bricksTex);
 	gTextures[stoneTex->Name] = std::move(stoneTex);
 	gTextures[tileTex->Name] = std::move(tileTex);
+	gTextures[bricksNorm->Name] = std::move(bricksNorm);
+	//gTextures[stoneNorm->Name] = std::move(stoneNorm);
+	gTextures[tileNorm->Name] = std::move(tileNorm);
 
 
 
@@ -645,6 +680,7 @@ void BuildMaterials()
 	bricks0->Name = "bricks0";
 	//bricks0->MatCBIndex = 0;
 	bricks0->DiffuseSrvHeapIndex = indicies[0]; // TODO: Ensure these are correct
+	bricks0->NormalMapSrvHeapIndex = indicies[1];
 	bricks0->AmbientAlbedo = { 0.25f, 0.25f, 0.35f, 1.0f };
 	bricks0->DiffuseAlbedo = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f); //XMFLOAT4(Colors::ForestGreen);
 	bricks0->FresnelR0 = XMFLOAT3(0.02f, 0.02f, 0.02f);
@@ -653,7 +689,8 @@ void BuildMaterials()
 	auto stone0 = std::make_unique<Material>();
 	stone0->Name = "stone0";
 	//stone0->MatCBIndex = 1;
-	stone0->DiffuseSrvHeapIndex = indicies[1];
+	stone0->DiffuseSrvHeapIndex = indicies[2];
+	//stone0->NormalMapSrvHeapIndex = indicies[3];
 	stone0->AmbientAlbedo = { 0.25f, 0.25f, 0.35f, 1.0f };
 	stone0->DiffuseAlbedo = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f); //XMFLOAT4(Colors::LightSteelBlue);
 	stone0->FresnelR0 = XMFLOAT3(0.05f, 0.05f, 0.05f);
@@ -662,7 +699,8 @@ void BuildMaterials()
 	auto tile0 = std::make_unique<Material>();
 	tile0->Name = "tile0";
 	//tile0->MatCBIndex = 2;
-	tile0->DiffuseSrvHeapIndex = indicies[2];
+	tile0->DiffuseSrvHeapIndex = indicies[3];
+	tile0->NormalMapSrvHeapIndex = indicies[4];
 	tile0->AmbientAlbedo = { 0.25f, 0.25f, 0.35f, 1.0f };
 	tile0->DiffuseAlbedo = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f); //XMFLOAT4(Colors::LightGray);
 	tile0->FresnelR0 = XMFLOAT3(0.02f, 0.02f, 0.02f);
