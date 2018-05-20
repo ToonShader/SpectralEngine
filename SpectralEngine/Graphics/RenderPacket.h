@@ -29,4 +29,7 @@ struct RenderPacket
 
 	// For potential later functionality
 	// int NumFramesDirty = gNumFrameResources;
+
+	// Global bounds for all geometry in the packet
+	DirectX::BoundingBox Bounds;
 };

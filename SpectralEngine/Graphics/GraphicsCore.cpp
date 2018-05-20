@@ -295,7 +295,12 @@ void GraphicsCore::testrender(const Camera& camera)
 	//passCbvHandle.Offset(passCbvIndex, mCbvSrvUavDescriptorSize);
 	//mCommandList->SetGraphicsRootDescriptorTable(0, passCbvHandle);
 
-	DrawRenderItems(mCommandList.Get(), cmdListAlloc.Get(), mOpaqueRenderPackets);
+	BoundingFrustum cameraFrustum;
+	BoundingFrustum::CreateFromMatrix(cameraFrustum, camera.GetProj());
+
+	std::vector<RenderPacket*> visibleRenderPackets;
+	CullObjectsByFrustum(visibleRenderPackets, mOpaqueRenderPackets, cameraFrustum, camera.GetView());
+	DrawRenderItems(mCommandList.Get(), cmdListAlloc.Get(), visibleRenderPackets);
 
 	// Indicate a state transition on the resource usage.
 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),
@@ -679,6 +684,23 @@ void GraphicsCore::UpdateMainPassCB()
 	currPassCB->CopyData(0, mMainPassCB);
 
 	nvtxRangePop();
+}
+
+void Spectral::Graphics::GraphicsCore::CullObjectsByFrustum(std::vector<RenderPacket*>& visible, const std::vector<RenderPacket*>& objects, const DirectX::BoundingFrustum& frustum, FXMMATRIX view)
+{
+	for (int i = 0; i < objects.size(); ++i)
+	{
+		// Perform containment check in view space
+		XMMATRIX world = XMLoadFloat4x4(&objects[i]->World);
+		XMMATRIX worldView = XMMatrixMultiply(world, view);
+
+		DirectX::BoundingBox viewBox;
+		//DirectX::BoundingBox::CreateFromBoundingBox(viewBox, objects[i]->Bounds);
+		objects[i]->Bounds.Transform(viewBox, worldView);
+
+		if (frustum.Contains(viewBox) != ContainmentType::DISJOINT)
+			visible.push_back(objects[i]);
+	}
 }
 
 std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> GraphicsCore::GetStaticSamplers()

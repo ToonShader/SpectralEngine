@@ -359,21 +359,25 @@ void BuildShapeGeometry()
 	boxSubmesh.IndexCount = (UINT)box.Indices32.size();
 	boxSubmesh.StartIndexLocation = boxIndexOffset;
 	boxSubmesh.BaseVertexLocation = boxVertexOffset;
+	DirectX::BoundingBox::CreateFromPoints(boxSubmesh.Bounds, box.Vertices.size(), &(box.Vertices[0].Position), sizeof(GeometryGenerator::Vertex));
 
 	SubMesh gridSubmesh;
 	gridSubmesh.IndexCount = (UINT)grid.Indices32.size();
 	gridSubmesh.StartIndexLocation = gridIndexOffset;
 	gridSubmesh.BaseVertexLocation = gridVertexOffset;
+	DirectX::BoundingBox::CreateFromPoints(gridSubmesh.Bounds, grid.Vertices.size(), &(grid.Vertices[0].Position), sizeof(GeometryGenerator::Vertex));
 
 	SubMesh sphereSubmesh;
 	sphereSubmesh.IndexCount = (UINT)sphere.Indices32.size();
 	sphereSubmesh.StartIndexLocation = sphereIndexOffset;
 	sphereSubmesh.BaseVertexLocation = sphereVertexOffset;
+	DirectX::BoundingBox::CreateFromPoints(sphereSubmesh.Bounds, sphere.Vertices.size(), &(sphere.Vertices[0].Position), sizeof(GeometryGenerator::Vertex));
 
 	SubMesh cylinderSubmesh;
 	cylinderSubmesh.IndexCount = (UINT)cylinder.Indices32.size();
 	cylinderSubmesh.StartIndexLocation = cylinderIndexOffset;
 	cylinderSubmesh.BaseVertexLocation = cylinderVertexOffset;
+	DirectX::BoundingBox::CreateFromPoints(cylinderSubmesh.Bounds, cylinder.Vertices.size(), &(cylinder.Vertices[0].Position), sizeof(GeometryGenerator::Vertex));
 
 	//
 	// Extract the vertex elements we are interested in and pack the
@@ -462,7 +466,6 @@ void BuildShapeGeometry()
 
 void BuildRenderItems()
 {
-
 	auto boxRitem = std::make_unique<RenderPacket>();
 	XMStoreFloat4x4(&boxRitem->World, XMMatrixScaling(2.0f, 2.0f, 2.0f)*XMMatrixTranslation(0.0f, 1.0f, 0.0f));
 	//XMStoreFloat4x4(&boxRitem->TexTransform, XMMatrixScaling(0.3f, 0.3f, 0.3f));
@@ -473,6 +476,7 @@ void BuildRenderItems()
 	boxRitem->IndexCount = boxRitem->Geo->DrawArgs["box"].IndexCount;
 	boxRitem->StartIndexLocation = boxRitem->Geo->DrawArgs["box"].StartIndexLocation;
 	boxRitem->BaseVertexLocation = boxRitem->Geo->DrawArgs["box"].BaseVertexLocation;
+	boxRitem->Bounds = boxRitem->Geo->DrawArgs["box"].Bounds;
 	gAllRitems.push_back(std::move(boxRitem));
 
 	auto gridRitem = std::make_unique<RenderPacket>();
@@ -486,6 +490,7 @@ void BuildRenderItems()
 	gridRitem->IndexCount = gridRitem->Geo->DrawArgs["grid"].IndexCount;
 	gridRitem->StartIndexLocation = gridRitem->Geo->DrawArgs["grid"].StartIndexLocation;
 	gridRitem->BaseVertexLocation = gridRitem->Geo->DrawArgs["grid"].BaseVertexLocation;
+	gridRitem->Bounds = gridRitem->Geo->DrawArgs["grid"].Bounds;
 
 	auto leftWallRItem = std::make_unique<RenderPacket>();
 	(*leftWallRItem) = (*gridRitem);
@@ -541,6 +546,7 @@ void BuildRenderItems()
 		leftCylRitem->IndexCount = leftCylRitem->Geo->DrawArgs["cylinder"].IndexCount;
 		leftCylRitem->StartIndexLocation = leftCylRitem->Geo->DrawArgs["cylinder"].StartIndexLocation;
 		leftCylRitem->BaseVertexLocation = leftCylRitem->Geo->DrawArgs["cylinder"].BaseVertexLocation;
+		leftCylRitem->Bounds = leftCylRitem->Geo->DrawArgs["cylinder"].Bounds;
 
 		XMStoreFloat4x4(&rightCylRitem->World, leftCylWorld);
 		XMStoreFloat4x4(&rightCylRitem->TexTransform, brickTexTransform);
@@ -551,6 +557,7 @@ void BuildRenderItems()
 		rightCylRitem->IndexCount = rightCylRitem->Geo->DrawArgs["cylinder"].IndexCount;
 		rightCylRitem->StartIndexLocation = rightCylRitem->Geo->DrawArgs["cylinder"].StartIndexLocation;
 		rightCylRitem->BaseVertexLocation = rightCylRitem->Geo->DrawArgs["cylinder"].BaseVertexLocation;
+		rightCylRitem->Bounds = rightCylRitem->Geo->DrawArgs["cylinder"].Bounds;
 
 		XMStoreFloat4x4(&leftSphereRitem->World, leftSphereWorld);
 		leftSphereRitem->TexTransform = Spectral::Math::XMF4x4Identity();
@@ -561,6 +568,7 @@ void BuildRenderItems()
 		leftSphereRitem->IndexCount = leftSphereRitem->Geo->DrawArgs["sphere"].IndexCount;
 		leftSphereRitem->StartIndexLocation = leftSphereRitem->Geo->DrawArgs["sphere"].StartIndexLocation;
 		leftSphereRitem->BaseVertexLocation = leftSphereRitem->Geo->DrawArgs["sphere"].BaseVertexLocation;
+		leftSphereRitem->Bounds = leftSphereRitem->Geo->DrawArgs["sphere"].Bounds;
 
 		XMStoreFloat4x4(&rightSphereRitem->World, rightSphereWorld);
 		rightSphereRitem->TexTransform = Spectral::Math::XMF4x4Identity();
@@ -571,6 +579,7 @@ void BuildRenderItems()
 		rightSphereRitem->IndexCount = rightSphereRitem->Geo->DrawArgs["sphere"].IndexCount;
 		rightSphereRitem->StartIndexLocation = rightSphereRitem->Geo->DrawArgs["sphere"].StartIndexLocation;
 		rightSphereRitem->BaseVertexLocation = rightSphereRitem->Geo->DrawArgs["sphere"].BaseVertexLocation;
+		rightSphereRitem->Bounds = rightSphereRitem->Geo->DrawArgs["sphere"].Bounds;
 
 		gAllRitems.push_back(std::move(leftCylRitem));
 		gAllRitems.push_back(std::move(rightCylRitem));

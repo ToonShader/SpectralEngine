@@ -102,6 +102,9 @@ namespace Spectral
 			void UpdateMaterialCBs(const std::vector<RenderPacket*>& packets, int startIndex, int numToUpdate);
 			void UpdateMainPassCB();
 
+			void CullObjectsByFrustum(std::vector<RenderPacket*>& visible, const std::vector<RenderPacket*>& objects,
+				const DirectX::BoundingFrustum& frustum, FXMMATRIX view);
+
 			// Temporary
 			std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> GetStaticSamplers();
 
