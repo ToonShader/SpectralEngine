@@ -8,6 +8,9 @@
 
 extern const int gNumFrameResources;
 
+// Shaders are always in pairs of 2
+enum NamedPSO { Default, Default_WF, NormalMap, NormalMap_WF, SkyMap, SkyMap_WF, Count };
+
 struct RenderPacket
 {
 	// Not currently used as I don't like the dependencies it creates.
@@ -20,6 +23,7 @@ struct RenderPacket
 	Material* Mat = nullptr;
 	Mesh* Geo = nullptr;
 
+	NamedPSO PSO = NamedPSO::Default;
 	// Info to index into mesh for drawing
 	UINT IndexCount = 0;
 	UINT StartIndexLocation = 0;

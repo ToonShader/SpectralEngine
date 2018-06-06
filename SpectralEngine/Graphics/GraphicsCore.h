@@ -32,8 +32,6 @@ namespace Spectral
 {
 	namespace Graphics
 	{
-		enum NamedPSO { Default, Default_WF, NormalMap, NormalMap_WF, Count };
-
 		// NOTE: Commented out functions, specifiers, and arguments are potential candidates for changes
 		// as this class is still being prototyped and designed.
 		class GraphicsCore

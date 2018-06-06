@@ -20,8 +20,9 @@
 // Include structures and functions for lighting.
 #include "LightingUtil.hlsl"
 
-Texture2D	gDiffuseMap : register(t0);
-Texture2D	gNormalMap : register(t1);
+Texture2D	gDiffuseMap : register(t0, space0);
+Texture2D	gNormalMap : register(t1, space0);
+TextureCube gCubeMap : register(t0, space1);
 
 
 SamplerState gsamPointWrap        : register(s0);
@@ -90,6 +91,12 @@ struct VertexOut
 	float2 TexC		: TEXCOORD;
 };
 
+struct SkyVertexOut
+{
+	float4 PosH : SV_POSITION;
+	float3 PosL : POSITION;
+};
+
 //---------------------------------------------------------------------------------------
 // Transforms a normal map sample to world space.
 //---------------------------------------------------------------------------------------
@@ -111,6 +118,7 @@ float3 NormalSampleToWorldSpace(float3 normalMapSample, float3 unitNormalW, floa
 	return bumpedNormalW;
 }
 
+// Default shaders
 VertexOut VS(VertexIn vin)
 {
 	VertexOut vout = (VertexOut)0.0f;
@@ -159,6 +167,7 @@ float4 PS(VertexOut pin) : SV_Target
     return litColor;
 }
 
+// Normal mapping shaders
 VertexOut VS_NormalMapped(VertexIn vin)
 {
 	VertexOut vout = (VertexOut)0.0f;
@@ -211,6 +220,31 @@ float4 PS_NormalMapped(VertexOut pin) : SV_Target
 	litColor.a = diffuseAlbedo.a; // gDiffuseAlbedo.a;
 
 	return litColor;
+}
+
+// Sky mapping shaders
+SkyVertexOut VS_SkyMap(VertexIn vin)
+{
+	SkyVertexOut vout;
+
+	// Use local vertex position as cubemap lookup vector.
+	vout.PosL = vin.PosL;
+
+	// Transform to world space.
+	float4 posW = mul(float4(vin.PosL, 1.0f), gWorld);
+
+	// Always center sky about camera.
+	posW.xyz += gEyePosW;
+
+	// Set z = w so that z/w = 1 (i.e., skydome always on far plane).
+	vout.PosH = mul(posW, gViewProj).xyww;
+
+	return vout;
+}
+
+float4 PS_SkyMap(SkyVertexOut pin) : SV_Target
+{
+	return gCubeMap.Sample(gsamLinearWrap, pin.PosL);
 }
 
 

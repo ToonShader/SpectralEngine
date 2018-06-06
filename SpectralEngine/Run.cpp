@@ -472,6 +472,7 @@ void BuildRenderItems()
 	//boxRitem->ObjCBIndex = 0;
 	boxRitem->Mat = gMaterials["stone0"].get();
 	boxRitem->Geo = gGeometries["shapeGeo"].get();
+	boxRitem->PSO = NamedPSO::Default;
 	boxRitem->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 	boxRitem->IndexCount = boxRitem->Geo->DrawArgs["box"].IndexCount;
 	boxRitem->StartIndexLocation = boxRitem->Geo->DrawArgs["box"].StartIndexLocation;
@@ -486,6 +487,7 @@ void BuildRenderItems()
 	//gridRitem->ObjCBIndex = 1;
 	gridRitem->Mat = gMaterials["tile0"].get();
 	gridRitem->Geo = gGeometries["shapeGeo"].get();
+	gridRitem->PSO = NamedPSO::NormalMap;
 	gridRitem->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 	gridRitem->IndexCount = gridRitem->Geo->DrawArgs["grid"].IndexCount;
 	gridRitem->StartIndexLocation = gridRitem->Geo->DrawArgs["grid"].StartIndexLocation;
@@ -542,6 +544,7 @@ void BuildRenderItems()
 		//leftCylRitem->ObjCBIndex = objCBIndex++;
 		leftCylRitem->Mat = gMaterials["bricks0"].get();
 		leftCylRitem->Geo = gGeometries["shapeGeo"].get();
+		leftCylRitem->PSO = NamedPSO::NormalMap;
 		leftCylRitem->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 		leftCylRitem->IndexCount = leftCylRitem->Geo->DrawArgs["cylinder"].IndexCount;
 		leftCylRitem->StartIndexLocation = leftCylRitem->Geo->DrawArgs["cylinder"].StartIndexLocation;
@@ -553,6 +556,7 @@ void BuildRenderItems()
 		//rightCylRitem->ObjCBIndex = objCBIndex++;
 		rightCylRitem->Mat = gMaterials["bricks0"].get();
 		rightCylRitem->Geo = gGeometries["shapeGeo"].get();
+		rightCylRitem->PSO = NamedPSO::NormalMap;
 		rightCylRitem->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 		rightCylRitem->IndexCount = rightCylRitem->Geo->DrawArgs["cylinder"].IndexCount;
 		rightCylRitem->StartIndexLocation = rightCylRitem->Geo->DrawArgs["cylinder"].StartIndexLocation;
@@ -564,6 +568,7 @@ void BuildRenderItems()
 		//leftSphereRitem->ObjCBIndex = objCBIndex++;
 		leftSphereRitem->Mat = gMaterials["stone0"].get();
 		leftSphereRitem->Geo = gGeometries["shapeGeo"].get();
+		leftSphereRitem->PSO = NamedPSO::Default;
 		leftSphereRitem->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 		leftSphereRitem->IndexCount = leftSphereRitem->Geo->DrawArgs["sphere"].IndexCount;
 		leftSphereRitem->StartIndexLocation = leftSphereRitem->Geo->DrawArgs["sphere"].StartIndexLocation;
@@ -575,6 +580,7 @@ void BuildRenderItems()
 		//rightSphereRitem->ObjCBIndex = objCBIndex++;
 		rightSphereRitem->Mat = gMaterials["stone0"].get();
 		rightSphereRitem->Geo = gGeometries["shapeGeo"].get();
+		rightSphereRitem->PSO = NamedPSO::Default;
 		rightSphereRitem->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 		rightSphereRitem->IndexCount = rightSphereRitem->Geo->DrawArgs["sphere"].IndexCount;
 		rightSphereRitem->StartIndexLocation = rightSphereRitem->Geo->DrawArgs["sphere"].StartIndexLocation;
@@ -628,6 +634,20 @@ void BuildRenderItems()
 	for (auto& e : gAllRitems)
 		packets.push_back(e.get());
 
+	// Add the sky sphere last
+	auto skyRitem = std::make_unique<RenderPacket>();
+	XMStoreFloat4x4(&skyRitem->World, XMMatrixScaling(5000.0f, 5000.0f, 5000.0f));
+	skyRitem->Mat = gMaterials["sky"].get();
+	skyRitem->Geo = gGeometries["shapeGeo"].get();
+	skyRitem->PSO = NamedPSO::SkyMap;
+	skyRitem->PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	skyRitem->IndexCount = skyRitem->Geo->DrawArgs["sphere"].IndexCount;
+	skyRitem->StartIndexLocation = skyRitem->Geo->DrawArgs["sphere"].StartIndexLocation;
+	skyRitem->BaseVertexLocation = skyRitem->Geo->DrawArgs["sphere"].BaseVertexLocation;
+	skyRitem->Bounds = skyRitem->Geo->DrawArgs["sphere"].Bounds;
+	packets.push_back(skyRitem.get());
+	gAllRitems.push_back(std::move(skyRitem));
+
 	gGraphicsCore->SubmitRenderPackets(packets);
 }
 
@@ -661,6 +681,11 @@ void BuildMaterials()
 	tileNorm->Name = "tileNorm";
 	tileNorm->Filename = L"Textures/tile_nmap.dds";
 
+	auto skyTex = std::make_unique<Texture>();
+	skyTex->Name = "skyTex";
+	skyTex->Filename = L"Textures/skymap.dds";
+	skyTex->Type = Texture::TexCube;
+
 	// TODO: Redesign this interface
 	std::vector<Texture*> temp;
 	temp.push_back(bricksTex.get());
@@ -669,6 +694,7 @@ void BuildMaterials()
 	//temp.push_back(stoneNorm.get());
 	temp.push_back(tileTex.get());
 	temp.push_back(tileNorm.get());
+	temp.push_back(skyTex.get());
 
 	std::vector<short> indicies;
 	gGraphicsCore->LoadTextures(temp);
@@ -680,6 +706,7 @@ void BuildMaterials()
 	gTextures[bricksNorm->Name] = std::move(bricksNorm);
 	//gTextures[stoneNorm->Name] = std::move(stoneNorm);
 	gTextures[tileNorm->Name] = std::move(tileNorm);
+	gTextures[skyTex->Name] = std::move(skyTex);
 
 
 
@@ -715,9 +742,17 @@ void BuildMaterials()
 	tile0->FresnelR0 = XMFLOAT3(0.02f, 0.02f, 0.02f);
 	tile0->Roughness = 0.2f;
 
+	auto sky = std::make_unique<Material>();
+	sky->Name = "sky";
+	sky->DiffuseSrvHeapIndex = indicies[5];
+	sky->DiffuseAlbedo = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
+	sky->FresnelR0 = XMFLOAT3(0.1f, 0.1f, 0.1f);
+	sky->Roughness = 1.0f;
+
 	gMaterials["bricks0"] = std::move(bricks0);
 	gMaterials["stone0"] = std::move(stone0);
 	gMaterials["tile0"] = std::move(tile0);
+	gMaterials["sky"] = std::move(sky);
 }
 
 void OnMouseDown(WPARAM btnState, int x, int y)

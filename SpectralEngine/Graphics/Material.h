@@ -5,6 +5,9 @@
 
 struct Texture
 {
+	enum TextureType { Tex2D, TexCube };
+	TextureType Type = Tex2D;
+
 	// Unique material name for lookup.
 	std::string Name;
 

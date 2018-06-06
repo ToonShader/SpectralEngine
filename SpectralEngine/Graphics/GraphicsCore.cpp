@@ -295,12 +295,13 @@ void GraphicsCore::testrender(const Camera& camera)
 	//passCbvHandle.Offset(passCbvIndex, mCbvSrvUavDescriptorSize);
 	//mCommandList->SetGraphicsRootDescriptorTable(0, passCbvHandle);
 
-	BoundingFrustum cameraFrustum;
-	BoundingFrustum::CreateFromMatrix(cameraFrustum, camera.GetProj());
+	// Frustum culling is disabled for now
+	//BoundingFrustum cameraFrustum;
+	//BoundingFrustum::CreateFromMatrix(cameraFrustum, camera.GetProj());
 
-	std::vector<RenderPacket*> visibleRenderPackets;
-	CullObjectsByFrustum(visibleRenderPackets, mOpaqueRenderPackets, cameraFrustum, camera.GetView());
-	DrawRenderItems(mCommandList.Get(), cmdListAlloc.Get(), visibleRenderPackets);
+	//std::vector<RenderPacket*> visibleRenderPackets;
+	//CullObjectsByFrustum(visibleRenderPackets, mOpaqueRenderPackets, cameraFrustum, camera.GetView());
+	DrawRenderItems(mCommandList.Get(), cmdListAlloc.Get(), mOpaqueRenderPackets);
 
 	// Indicate a state transition on the resource usage.
 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),
@@ -786,7 +787,7 @@ void GraphicsCore::BuildDescriptorHeaps()
 
 	// Create the SRV heap for textures.
 	D3D12_DESCRIPTOR_HEAP_DESC srvHeapDesc = {};
-	srvHeapDesc.NumDescriptors = 3 + 3; // 3 textures + 3 normal maps (will be configurable soon)
+	srvHeapDesc.NumDescriptors = 3 + 3 + 1; // 3 textures + 3 normal maps (will be configurable soon) + cube map
 	srvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 	srvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 	ASSERT_HR(md3dDevice->CreateDescriptorHeap(&srvHeapDesc, IID_PPV_ARGS(&mSrvDescriptorHeap)));
@@ -925,6 +926,30 @@ void GraphicsCore::BuildPSOs()
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC opaqueNormMapWireframePsoDesc = opaqueNormMapPsoDesc;
 	opaqueNormMapWireframePsoDesc.RasterizerState.FillMode = D3D12_FILL_MODE_WIREFRAME;
 	ASSERT_HR(md3dDevice->CreateGraphicsPipelineState(&opaqueNormMapWireframePsoDesc, IID_PPV_ARGS(&mPSOs[NamedPSO::NormalMap_WF])));
+
+
+	// PSO for sky mapping
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC skyPsoDesc = opaquePsoDesc;
+	// We are expected to be inside the geometry
+	skyPsoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+	// Shader forces depth to 1, so don't fail the depth test
+	skyPsoDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
+	skyPsoDesc.VS =
+	{
+		reinterpret_cast<BYTE*>(mShaders["standardSkyMapVS"]->GetBufferPointer()),
+		mShaders["standardSkyMapVS"]->GetBufferSize()
+	};
+	skyPsoDesc.PS =
+	{
+		reinterpret_cast<BYTE*>(mShaders["opaqueSkyMapPS"]->GetBufferPointer()),
+		mShaders["opaqueSkyMapPS"]->GetBufferSize()
+	};
+	ASSERT_HR(md3dDevice->CreateGraphicsPipelineState(&skyPsoDesc, IID_PPV_ARGS(&mPSOs[NamedPSO::SkyMap])));
+
+	// PSO for normal-mapped opaque wireframe objects.
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC skyWireframePsoDesc = skyPsoDesc;
+	skyWireframePsoDesc.RasterizerState.FillMode = D3D12_FILL_MODE_WIREFRAME;
+	ASSERT_HR(md3dDevice->CreateGraphicsPipelineState(&skyWireframePsoDesc, IID_PPV_ARGS(&mPSOs[NamedPSO::SkyMap_WF])));
 }
 
 void GraphicsCore::BuildFrameResources()
@@ -994,7 +1019,7 @@ void GraphicsCore::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, ID3D12Com
 
 		// Set PSO required to draw the object
 		auto ri = ritems[i];
-		if (ritems[i]->Mat->NormalMapSrvHeapIndex < 0) // TODO: REMOVE normal map index if it will always be adjacent, or add toggleable support for disparate locations
+		if (ritems[i]->PSO < NamedPSO::NormalMap) 
 		{ 
 			if (mIsWireframe && activePSO != NamedPSO::Default_WF)
 			{
@@ -1007,7 +1032,7 @@ void GraphicsCore::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, ID3D12Com
 				cmdList->SetPipelineState(mPSOs[activePSO].Get());
 			}
 		}
-		else
+		else if (ritems[i]->PSO < NamedPSO::SkyMap)
 		{
 			if (mIsWireframe && activePSO != NamedPSO::NormalMap_WF)
 			{
@@ -1017,6 +1042,19 @@ void GraphicsCore::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, ID3D12Com
 			else if (activePSO != NamedPSO::NormalMap)
 			{
 				activePSO = NamedPSO::NormalMap;
+				cmdList->SetPipelineState(mPSOs[activePSO].Get());
+			}
+		}
+		else
+		{
+			if (mIsWireframe && activePSO != NamedPSO::SkyMap_WF)
+			{
+				activePSO = NamedPSO::SkyMap_WF;
+				cmdList->SetPipelineState(mPSOs[activePSO].Get());
+			}
+			else if (activePSO != NamedPSO::SkyMap)
+			{
+				activePSO = NamedPSO::SkyMap;
 				cmdList->SetPipelineState(mPSOs[activePSO].Get());
 			}
 		}
@@ -1054,10 +1092,16 @@ void GraphicsCore::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, ID3D12Com
 		ID3D12DescriptorHeap* texDescriptorHeaps[] = { mSrvDescriptorHeap.Get() };
 		mCommandList->SetDescriptorHeaps(_countof(texDescriptorHeaps), texDescriptorHeaps);
 
+		// TODO: REMOVE normal map index if it will always be adjacent, or add toggleable support for disparate locations
 		CD3DX12_GPU_DESCRIPTOR_HANDLE tex(mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 		tex.Offset(ri->Mat->DiffuseSrvHeapIndex, mCbvSrvUavDescriptorSize);
 
-		cmdList->SetGraphicsRootDescriptorTable(3, tex);
+		if (activePSO < NamedPSO::SkyMap)
+			cmdList->SetGraphicsRootDescriptorTable(3, tex);
+		// TODO: Verify this is legal to exclude, then remove.
+		//else 
+		//	cmdList->SetGraphicsRootDescriptorTable(3, mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+		cmdList->SetGraphicsRootDescriptorTable(4, tex);
 
 		cmdList->DrawIndexedInstanced(ri->IndexCount, 1, ri->StartIndexLocation, ri->BaseVertexLocation, 0);
 	}
@@ -1078,22 +1122,26 @@ void GraphicsCore::BuildRootSignature()
 	CD3DX12_DESCRIPTOR_RANGE cbvTable2;
 	cbvTable2.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 2);
 
-	CD3DX12_DESCRIPTOR_RANGE texTable;
-	texTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 2, 0);
+	CD3DX12_DESCRIPTOR_RANGE texTable0;
+	texTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 2, 0); // texture + normal
+
+	CD3DX12_DESCRIPTOR_RANGE texTable1;
+	texTable1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 1); // sky map stored in space1
 
 	// Root parameter can be a table, root descriptor or root constants.
-	CD3DX12_ROOT_PARAMETER slotRootParameter[4];
+	CD3DX12_ROOT_PARAMETER slotRootParameter[5];
 
 	// Create root CBVs.
 	slotRootParameter[0].InitAsDescriptorTable(1, &cbvTable0); // PassCB
 	slotRootParameter[1].InitAsDescriptorTable(1, &cbvTable1); // MatCB
 	slotRootParameter[2].InitAsDescriptorTable(1, &cbvTable2); // ObjCB
-	slotRootParameter[3].InitAsDescriptorTable(1, &texTable, D3D12_SHADER_VISIBILITY_PIXEL); // texture + normal
+	slotRootParameter[3].InitAsDescriptorTable(1, &texTable0, D3D12_SHADER_VISIBILITY_PIXEL); // texture + normal + cubemap
+	slotRootParameter[4].InitAsDescriptorTable(1, &texTable1, D3D12_SHADER_VISIBILITY_PIXEL); // texture + normal + cubemap
 
 	auto staticSamplers = GetStaticSamplers();
 
 	// A root signature is an array of root parameters.
-	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(4, slotRootParameter, (UINT)staticSamplers.size(), staticSamplers.data(),
+	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(5, slotRootParameter, (UINT)staticSamplers.size(), staticSamplers.data(),
 		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
 	// create a root signature with a single slot which points to a descriptor range consisting of a single constant buffer
@@ -1114,10 +1162,12 @@ void GraphicsCore::BuildRootSignature()
 
 void GraphicsCore::BuildShadersAndInputLayout()
 {
-	mShaders["standardVS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "VS", "vs_4_0");
-	mShaders["opaquePS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "PS", "ps_4_0");
-	mShaders["standardNormMapVS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "VS_NormalMapped", "vs_4_0");
-	mShaders["opaqueNormMapPS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "PS_NormalMapped", "ps_4_0");
+	mShaders["standardVS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "VS", "vs_5_1");
+	mShaders["opaquePS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "PS", "ps_5_1");
+	mShaders["standardNormMapVS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "VS_NormalMapped", "vs_5_1");
+	mShaders["opaqueNormMapPS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "PS_NormalMapped", "ps_5_1");
+	mShaders["standardSkyMapVS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "VS_SkyMap", "vs_5_1");
+	mShaders["opaqueSkyMapPS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "PS_SkyMap", "ps_5_1");
 
 	mInputLayout =
 	{
@@ -1244,10 +1294,20 @@ void GraphicsCore::SubmitSceneTextures(std::vector<Texture*>& texes, std::vector
 		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 		srvDesc.Format = texResource->GetDesc().Format;
-		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-		srvDesc.Texture2D.MostDetailedMip = 0;
-		srvDesc.Texture2D.MipLevels = texResource->GetDesc().MipLevels;
-		srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
+		if (texes[i]->Type == Texture::Tex2D)
+		{
+			srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+			srvDesc.Texture2D.MostDetailedMip = 0;
+			srvDesc.Texture2D.MipLevels = texResource->GetDesc().MipLevels;
+			srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
+		}
+		else // Assumed cube map
+		{
+			srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
+			srvDesc.TextureCube.MostDetailedMip = 0;
+			srvDesc.TextureCube.MipLevels = texResource->GetDesc().MipLevels;
+			srvDesc.TextureCube.ResourceMinLODClamp = 0.0f;
+		}
 		md3dDevice->CreateShaderResourceView(texResource.Get(), &srvDesc, handle);
 	}
 
