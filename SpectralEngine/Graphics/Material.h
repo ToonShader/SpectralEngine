@@ -5,6 +5,9 @@
 
 struct Texture
 {
+	enum TextureType { Tex2D, TexCube };
+	TextureType Type = Tex2D;
+
 	// Unique material name for lookup.
 	std::string Name;
 
@@ -26,7 +29,8 @@ struct Material
 	int DiffuseSrvHeapIndex = -1;
 
 	// Index into SRV heap for normal texture.
-	//int NormalSrvHeapIndex = -1;
+	// (Currently only used to indicate presence of a normal map)
+	int NormalMapSrvHeapIndex = -1;
 
 	//int NumFramesDirty = gNumFrameResources;
 

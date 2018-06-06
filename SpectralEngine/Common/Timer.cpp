@@ -9,7 +9,7 @@ Timer::Timer()
 {
 	LARGE_INTEGER cyclesPerSec;
 	QueryPerformanceFrequency(&cyclesPerSec);
-	milisecondsPerCycle = 1.0 / (1000.0 * static_cast<double>(cyclesPerSec.QuadPart));
+	milisecondsPerCycle = 1000.0 / static_cast<double>(cyclesPerSec.QuadPart);
 }
 
 

@@ -7,11 +7,16 @@
 #include <DirectXColors.h>
 #include <d3dcompiler.h>
 #include <d3d12SDKLayers.h>
+#include <nvToolsExt.h>
 
 //#pragma comment(lib, "d3dcompiler.lib")
 #pragma comment(lib, "D3D12.lib")
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "d3dcompiler.lib")
+
+// Simple toggle for benchmarking to disable debug layers
+#define RELEASE
+
 
 #ifndef RELEASE
 #define new new ( _NORMAL_BLOCK , __FILE__ , __LINE__ )
@@ -25,7 +30,7 @@ GraphicsCore* GraphicsCore::mGraphicsCore = nullptr;
 using namespace DirectX;
 
 const int gNumFrameResources = 1;
-const int NUM_CBUFFERS = 35;
+const int NUM_CBUFFERS = 3000;
 
 GraphicsCore::GraphicsCore()
 {
@@ -36,6 +41,12 @@ GraphicsCore::~GraphicsCore()
 {
 	if (md3dDevice != nullptr)
 		FlushCommandQueue();
+
+	// We must disable fullscreen on the swap chain before terminating
+	BOOL fullscreen;
+	mSwapChain->GetFullscreenState(&fullscreen, nullptr);
+	if (fullscreen)
+		ASSERT_HR(mSwapChain->SetFullscreenState(false, nullptr));
 
 	if (mCurrFrameResource != nullptr)
 		delete mCurrFrameResource;
@@ -106,7 +117,7 @@ void GraphicsCore::ResizeWindow()
 		SWAP_CHAIN_BUFFER_COUNT,
 		mClientWidth, mClientHeight,
 		mBackBufferFormat,
-		DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH));
+		0));
 
 	mCurrBackBuffer = 0;
 
@@ -163,7 +174,7 @@ void GraphicsCore::ResizeWindow()
 	mScissorRect = { 0, 0, mClientWidth, mClientHeight };
 }
 
-void Spectral::Graphics::GraphicsCore::SubmitRenderPackets(const std::vector<RenderPacket*>& packets)
+void GraphicsCore::SubmitRenderPackets(const std::vector<RenderPacket*>& packets)
 {
 	mAllRenderPackets.insert(mAllRenderPackets.end(), packets.begin(), packets.end());
 	// For now, all packets are also opaque
@@ -215,42 +226,30 @@ void GraphicsCore::RenderPrePass()
 	FlushCommandQueue();
 }
 
-void Spectral::Graphics::GraphicsCore::testrender()
+void GraphicsCore::testrender(const Camera& camera)
 {
+	nvtxRangePushW(L"Scene Render");
+
+	DirectX::XMStoreFloat4x4(&mProj, camera.GetProj());
+	DirectX::XMStoreFloat4x4(&mView, camera.GetView());
+	DirectX::XMStoreFloat3(&mEyePos, camera.GetPosition());
+
 	// Each region marks distinct behavior which will be moved or removed soon.
-#pragma region UPDATE_CAMERA
-	XMMATRIX P = XMMatrixPerspectiveFovLH(0.25f * XM_PI, static_cast<float>(mClientWidth) / mClientHeight, 1.0f, 1000.0f);
-	DirectX::XMStoreFloat4x4(&mProj, P);
-	// Convert Spherical to Cartesian coordinates.
-	mTheta += 0.115;
-	mEyePos.x = mRadius*sinf(mPhi)*cosf(mTheta);
-	mEyePos.z = mRadius*sinf(mPhi)*sinf(mTheta);
-	mEyePos.y = mRadius*cosf(mPhi);
-
-	// Build the view matrix.
-	XMVECTOR pos = XMVectorSet(mEyePos.x, mEyePos.y, mEyePos.z, 1.0f);
-	XMVECTOR target = XMVectorZero();
-	XMVECTOR up = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
-
-	XMMATRIX view = XMMatrixLookAtLH(pos, target, up);
-	DirectX::XMStoreFloat4x4(&mView, view);
-#pragma endregion
-
 #pragma region UPDATE
 	//mCurrFrameResourceIndex = (mCurrFrameResourceIndex + 1) % gNumFrameResources;
 	//mCurrFrameResource = mFrameResources[mCurrFrameResourceIndex].get();
 
-	// Has the GPU finished processing the commands of the current frame resource?
-	// If not, wait until the GPU has completed commands up to this fence point.
-	if (mCurrFrameResource->Fence != 0 && mFence->GetCompletedValue() < mCurrFrameResource->Fence)
-	{
-		HANDLE eventHandle = CreateEventEx(nullptr, false, false, EVENT_ALL_ACCESS);
-		ASSERT_HR(mFence->SetEventOnCompletion(mCurrFrameResource->Fence, eventHandle));
-		WaitForSingleObject(eventHandle, INFINITE);
-		CloseHandle(eventHandle);
-	}
+	// Force completion of any unexecuted GPU commands
+	//if (mCurrFrameResource->Fence != 0 && mFence->GetCompletedValue() < mCurrFrameResource->Fence)
+	//{
+	//	HANDLE eventHandle = CreateEventEx(nullptr, false, false, EVENT_ALL_ACCESS);
+	//	ASSERT_HR(mFence->SetEventOnCompletion(mCurrFrameResource->Fence, eventHandle));
+	//	WaitForSingleObject(eventHandle, INFINITE);
+	//	CloseHandle(eventHandle);
+	//}
 
-	//UpdateObjectCBs();
+	FlushCommandQueue();
+
 	UpdateMainPassCB();
 #pragma endregion
 
@@ -265,11 +264,11 @@ void Spectral::Graphics::GraphicsCore::testrender()
 	// Reusing the command list reuses memory.
 	if (mIsWireframe)
 	{
-		ASSERT_HR(mCommandList->Reset(cmdListAlloc.Get(), mPSOs["opaque_wireframe"].Get()));
+		ASSERT_HR(mCommandList->Reset(cmdListAlloc.Get(), mPSOs[NamedPSO::Default_WF].Get()));
 	}
 	else
 	{
-		ASSERT_HR(mCommandList->Reset(cmdListAlloc.Get(), mPSOs["opaque"].Get()));
+		ASSERT_HR(mCommandList->Reset(cmdListAlloc.Get(), mPSOs[NamedPSO::Default].Get()));
 	}
 
 	mCommandList->RSSetViewports(1, &mScreenViewport);
@@ -296,6 +295,12 @@ void Spectral::Graphics::GraphicsCore::testrender()
 	//passCbvHandle.Offset(passCbvIndex, mCbvSrvUavDescriptorSize);
 	//mCommandList->SetGraphicsRootDescriptorTable(0, passCbvHandle);
 
+	// Frustum culling is disabled for now
+	//BoundingFrustum cameraFrustum;
+	//BoundingFrustum::CreateFromMatrix(cameraFrustum, camera.GetProj());
+
+	//std::vector<RenderPacket*> visibleRenderPackets;
+	//CullObjectsByFrustum(visibleRenderPackets, mOpaqueRenderPackets, cameraFrustum, camera.GetView());
 	DrawRenderItems(mCommandList.Get(), cmdListAlloc.Get(), mOpaqueRenderPackets);
 
 	// Indicate a state transition on the resource usage.
@@ -320,6 +325,8 @@ void Spectral::Graphics::GraphicsCore::testrender()
 	mCommandQueue->Signal(mFence.Get(), mCurrentFence);
 
 #pragma endregion
+
+	nvtxRangePop();
 }
 
 #define D3DCOMPILE_DEBUG 1
@@ -338,8 +345,8 @@ bool GraphicsCore::InitDirect3D()
 
 	ASSERT_HR(CreateDXGIFactory2(dxgiFactoryFlags, IID_PPV_ARGS(&mdxgiFactory)));
 
-	// Create hardware device for default adapter with feature level 12
-	HRESULT hr = D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_12_0, IID_PPV_ARGS(&md3dDevice));
+	// Create hardware device for default adapter with feature level 11
+	HRESULT hr = D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&md3dDevice));
 	if (FAILED(hr))
 	{
 		// Fallback to warp device if default
@@ -481,7 +488,7 @@ void GraphicsCore::CreateSwapChain()
 	scDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 	scDesc.BufferCount = SWAP_CHAIN_BUFFER_COUNT;
 	scDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-	scDesc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
+	scDesc.Flags = 0;
 
 	// Note: Swap chain flushes queue
 	// Note: This is where initial fullscreen will need to be established
@@ -491,6 +498,8 @@ void GraphicsCore::CreateSwapChain()
 
 void GraphicsCore::FlushCommandQueue()
 {
+	nvtxRangePushW(L"Flush CQ");
+
 	// Mark new fence value
 	mCurrentFence++;
 
@@ -512,10 +521,14 @@ void GraphicsCore::FlushCommandQueue()
 		WaitForSingleObject(eventHandle, INFINITE);
 		CloseHandle(eventHandle);
 	}*/
+
+	nvtxRangePop();
 }
 
-void Spectral::Graphics::GraphicsCore::UpdateObjectCBs(const std::vector<RenderPacket*>& packets, int startIndex, int numToUpdate)
+void GraphicsCore::UpdateObjectCBs(const std::vector<RenderPacket*>& packets, int startIndex, int numToUpdate)
 {
+	nvtxRangePushW(L"Update OCBs");
+
 	assert(numToUpdate <= NUM_CBUFFERS);
 	auto currObjectCB = mCurrFrameResource->ObjectCB.get();
 
@@ -540,10 +553,14 @@ void Spectral::Graphics::GraphicsCore::UpdateObjectCBs(const std::vector<RenderP
 			//e->NumFramesDirty--;
 		//}
 	}
+
+	nvtxRangePop();
 }
 
-void Spectral::Graphics::GraphicsCore::UpdateMaterialCBs(const std::vector<RenderPacket*>& packets, int startIndex, int numToUpdate)
+void GraphicsCore::UpdateMaterialCBs(const std::vector<RenderPacket*>& packets, int startIndex, int numToUpdate)
 {
+	nvtxRangePushW(L"Update MCBs");
+
 	assert(numToUpdate <= NUM_CBUFFERS);
 	auto currMaterialCB = mCurrFrameResource->MaterialCB.get();
 
@@ -568,10 +585,14 @@ void Spectral::Graphics::GraphicsCore::UpdateMaterialCBs(const std::vector<Rende
 			//mat->NumFramesDirty--;
 		//}
 	}
+
+	nvtxRangePop();
 }
 
-void Spectral::Graphics::GraphicsCore::UpdateMainPassCB()
+void GraphicsCore::UpdateMainPassCB()
 {
+	nvtxRangePushW(L"Update MPCB");
+
 	// This is overkill for now, but may prove useful in the future if
 	// I decide to keep per-pass CBs
 	XMMATRIX view = XMLoadFloat4x4(&mView);
@@ -613,20 +634,77 @@ void Spectral::Graphics::GraphicsCore::UpdateMainPassCB()
 	//mMainPassCB.Lights[2].Strength = { 0.15f, 0.15f, 0.15f };
 
 	mMainPassCB.Lights[0].Position = { 6.57735f, 6.57735f, 6.57735f };
-	mMainPassCB.Lights[0].FalloffStart = 1.0f;
 	mMainPassCB.Lights[0].FalloffEnd = 30;
 	mMainPassCB.Lights[0].Strength = { 1.8f, 1.8f, 1.8f };
+
 	mMainPassCB.Lights[1].Position = { -12.0f, 2.57735f, -12.0f };
 	mMainPassCB.Lights[1].Strength = { 2.0f, 0.5f, 2.0f };
 	mMainPassCB.Lights[1].FalloffEnd = 18;
-	mMainPassCB.Lights[2].Position = { 5.0f, 5.707f, 5.707f };
-	mMainPassCB.Lights[2].Strength = { 0.0f, 0.0f, 0.0f };
+
+	mMainPassCB.Lights[2].Position = { 0.0f, 8.0f, 90.0f };
+	mMainPassCB.Lights[2].Strength = { 1.0f, 1.0f, 1.0f };
+	mMainPassCB.Lights[2].FalloffStart = 40;
+	mMainPassCB.Lights[2].FalloffEnd = 60;
+
+	mMainPassCB.Lights[3].Position = { 90.0f, 8.0f, 90.0f };
+	mMainPassCB.Lights[3].Strength = { 1.0f, 1.0f, 1.0f };
+	mMainPassCB.Lights[3].FalloffStart = 40;
+	mMainPassCB.Lights[3].FalloffEnd = 60;
+
+	mMainPassCB.Lights[4].Position = { 90.0f, 8.0f, 0.0f };
+	mMainPassCB.Lights[4].Strength = { 1.0f, 1.0f, 1.0f };
+	mMainPassCB.Lights[4].FalloffStart = 40;
+	mMainPassCB.Lights[4].FalloffEnd = 60;
+
+	mMainPassCB.Lights[5].Position = { 90.0f, 8.0f, -90.0f };
+	mMainPassCB.Lights[5].Strength = { 1.0f, 1.0f, 1.0f };
+	mMainPassCB.Lights[5].FalloffStart = 40;
+	mMainPassCB.Lights[5].FalloffEnd = 60;
+
+	mMainPassCB.Lights[6].Position = { 0.0f, 8.0f, -90.0f };
+	mMainPassCB.Lights[6].Strength = { 1.0f, 1.0f, 1.0f };
+	mMainPassCB.Lights[6].FalloffStart = 40;
+	mMainPassCB.Lights[6].FalloffEnd = 60;
+
+	mMainPassCB.Lights[7].Position = { -90.0f, 8.0f, -90.0f };
+	mMainPassCB.Lights[7].Strength = { 1.0f, 1.0f, 1.0f };
+	mMainPassCB.Lights[7].FalloffStart = 40;
+	mMainPassCB.Lights[7].FalloffEnd = 60;
+
+	mMainPassCB.Lights[8].Position = { -90.0f, 8.0f, 0.0f };
+	mMainPassCB.Lights[8].Strength = { 1.0f, 1.0f, 1.0f };
+	mMainPassCB.Lights[8].FalloffStart = 40;
+	mMainPassCB.Lights[8].FalloffEnd = 60;
+
+	mMainPassCB.Lights[9].Position = { -90.0f, 8.0f, 90.0f };
+	mMainPassCB.Lights[9].Strength = { 1.0f, 1.0f, 1.0f };
+	mMainPassCB.Lights[9].FalloffStart = 40;
+	mMainPassCB.Lights[9].FalloffEnd = 60;
 
 	auto currPassCB = mCurrFrameResource->PassCB.get();
 	currPassCB->CopyData(0, mMainPassCB);
+
+	nvtxRangePop();
 }
 
-std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> Spectral::Graphics::GraphicsCore::GetStaticSamplers()
+void Spectral::Graphics::GraphicsCore::CullObjectsByFrustum(std::vector<RenderPacket*>& visible, const std::vector<RenderPacket*>& objects, const DirectX::BoundingFrustum& frustum, FXMMATRIX view)
+{
+	for (int i = 0; i < objects.size(); ++i)
+	{
+		// Perform containment check in view space
+		XMMATRIX world = XMLoadFloat4x4(&objects[i]->World);
+		XMMATRIX worldView = XMMatrixMultiply(world, view);
+
+		DirectX::BoundingBox viewBox;
+		//DirectX::BoundingBox::CreateFromBoundingBox(viewBox, objects[i]->Bounds);
+		objects[i]->Bounds.Transform(viewBox, worldView);
+
+		if (frustum.Contains(viewBox) != ContainmentType::DISJOINT)
+			visible.push_back(objects[i]);
+	}
+}
+
+std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> GraphicsCore::GetStaticSamplers()
 {
 	// Applications usually only need a handful of samplers.  So just define them all up front
 	// and keep them available as part of the root signature.  
@@ -683,7 +761,7 @@ std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> Spectral::Graphics::GraphicsCor
 		anisotropicWrap, anisotropicClamp };
 }
 
-void Spectral::Graphics::GraphicsCore::BuildDescriptorHeaps()
+void GraphicsCore::BuildDescriptorHeaps()
 {
 	// The design of this system isn't fully decided,
 	// but for now the number of buffers is fixed.
@@ -709,13 +787,13 @@ void Spectral::Graphics::GraphicsCore::BuildDescriptorHeaps()
 
 	// Create the SRV heap for textures.
 	D3D12_DESCRIPTOR_HEAP_DESC srvHeapDesc = {};
-	srvHeapDesc.NumDescriptors = 3;
+	srvHeapDesc.NumDescriptors = 3 + 3 + 1; // 3 textures + 3 normal maps (will be configurable soon) + cube map
 	srvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 	srvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 	ASSERT_HR(md3dDevice->CreateDescriptorHeap(&srvHeapDesc, IID_PPV_ARGS(&mSrvDescriptorHeap)));
 }
 
-void Spectral::Graphics::GraphicsCore::BuildConstantBufferViews()
+void GraphicsCore::BuildConstantBufferViews()
 {
 	UINT objCount = NUM_CBUFFERS;
 
@@ -792,11 +870,12 @@ void Spectral::Graphics::GraphicsCore::BuildConstantBufferViews()
 	//}
 }
 
-void Spectral::Graphics::GraphicsCore::BuildPSOs()
+void GraphicsCore::BuildPSOs()
 {
-	D3D12_GRAPHICS_PIPELINE_STATE_DESC opaquePsoDesc;
+	mPSOs.resize(NamedPSO::Count);
 
-	// PSO for opaque objects.
+	// PSO for standard opaque objects.
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC opaquePsoDesc;
 	ZeroMemory(&opaquePsoDesc, sizeof(D3D12_GRAPHICS_PIPELINE_STATE_DESC));
 	opaquePsoDesc.InputLayout = { mInputLayout.data(), (UINT)mInputLayout.size() };
 	opaquePsoDesc.pRootSignature = mRootSignature.Get();
@@ -821,15 +900,59 @@ void Spectral::Graphics::GraphicsCore::BuildPSOs()
 	opaquePsoDesc.SampleDesc.Count = 1;// m4xMsaaState ? 4 : 1;
 	opaquePsoDesc.SampleDesc.Quality = 0;// m4xMsaaState ? (m4xMsaaQuality - 1) : 0;
 	opaquePsoDesc.DSVFormat = mDepthStencilFormat;
-	ASSERT_HR(md3dDevice->CreateGraphicsPipelineState(&opaquePsoDesc, IID_PPV_ARGS(&mPSOs["opaque"])));
+	ASSERT_HR(md3dDevice->CreateGraphicsPipelineState(&opaquePsoDesc, IID_PPV_ARGS(&mPSOs[NamedPSO::Default])));
 
-	// PSO for opaque wireframe objects.
+	// PSO for standard opaque wireframe objects.
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC opaqueWireframePsoDesc = opaquePsoDesc;
 	opaqueWireframePsoDesc.RasterizerState.FillMode = D3D12_FILL_MODE_WIREFRAME;
-	ASSERT_HR(md3dDevice->CreateGraphicsPipelineState(&opaqueWireframePsoDesc, IID_PPV_ARGS(&mPSOs["opaque_wireframe"])));
+	ASSERT_HR(md3dDevice->CreateGraphicsPipelineState(&opaqueWireframePsoDesc, IID_PPV_ARGS(&mPSOs[NamedPSO::Default_WF])));
+
+
+	// PSO for normal-mapped opaque objects
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC opaqueNormMapPsoDesc = opaquePsoDesc;
+	opaqueNormMapPsoDesc.VS =
+	{
+		reinterpret_cast<BYTE*>(mShaders["standardNormMapVS"]->GetBufferPointer()),
+		mShaders["standardNormMapVS"]->GetBufferSize()
+	};
+	opaqueNormMapPsoDesc.PS =
+	{
+		reinterpret_cast<BYTE*>(mShaders["opaqueNormMapPS"]->GetBufferPointer()),
+		mShaders["opaqueNormMapPS"]->GetBufferSize()
+	};
+	ASSERT_HR(md3dDevice->CreateGraphicsPipelineState(&opaqueNormMapPsoDesc, IID_PPV_ARGS(&mPSOs[NamedPSO::NormalMap])));
+
+	// PSO for normal-mapped opaque wireframe objects.
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC opaqueNormMapWireframePsoDesc = opaqueNormMapPsoDesc;
+	opaqueNormMapWireframePsoDesc.RasterizerState.FillMode = D3D12_FILL_MODE_WIREFRAME;
+	ASSERT_HR(md3dDevice->CreateGraphicsPipelineState(&opaqueNormMapWireframePsoDesc, IID_PPV_ARGS(&mPSOs[NamedPSO::NormalMap_WF])));
+
+
+	// PSO for sky mapping
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC skyPsoDesc = opaquePsoDesc;
+	// We are expected to be inside the geometry
+	skyPsoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+	// Shader forces depth to 1, so don't fail the depth test
+	skyPsoDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
+	skyPsoDesc.VS =
+	{
+		reinterpret_cast<BYTE*>(mShaders["standardSkyMapVS"]->GetBufferPointer()),
+		mShaders["standardSkyMapVS"]->GetBufferSize()
+	};
+	skyPsoDesc.PS =
+	{
+		reinterpret_cast<BYTE*>(mShaders["opaqueSkyMapPS"]->GetBufferPointer()),
+		mShaders["opaqueSkyMapPS"]->GetBufferSize()
+	};
+	ASSERT_HR(md3dDevice->CreateGraphicsPipelineState(&skyPsoDesc, IID_PPV_ARGS(&mPSOs[NamedPSO::SkyMap])));
+
+	// PSO for normal-mapped opaque wireframe objects.
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC skyWireframePsoDesc = skyPsoDesc;
+	skyWireframePsoDesc.RasterizerState.FillMode = D3D12_FILL_MODE_WIREFRAME;
+	ASSERT_HR(md3dDevice->CreateGraphicsPipelineState(&skyWireframePsoDesc, IID_PPV_ARGS(&mPSOs[NamedPSO::SkyMap_WF])));
 }
 
-void Spectral::Graphics::GraphicsCore::BuildFrameResources()
+void GraphicsCore::BuildFrameResources()
 {
 	if (mCurrFrameResource)
 		delete mCurrFrameResource;
@@ -840,13 +963,16 @@ void Spectral::Graphics::GraphicsCore::BuildFrameResources()
 	//}
 }
 
-void Spectral::Graphics::GraphicsCore::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, ID3D12CommandAllocator* listAlloc, const std::vector<RenderPacket*>& ritems)
+void GraphicsCore::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, ID3D12CommandAllocator* listAlloc, const std::vector<RenderPacket*>& ritems)
 {
+	nvtxRangePushW(L"Draw Items");
+
 	UINT objCBByteSize = CalcConstantBufferByteSize(sizeof(ObjectConstants));
 
 	//auto objectCB = mCurrFrameResource->ObjectCB->Resource();
 
 	// For each render item...
+	NamedPSO activePSO = NamedPSO::Default;
 	for (size_t i = 0; i < ritems.size(); ++i)
 	{
 		if (i % NUM_CBUFFERS == 0)
@@ -855,26 +981,32 @@ void Spectral::Graphics::GraphicsCore::DrawRenderItems(ID3D12GraphicsCommandList
 			
 			// We will be updating the CBs on the GPU, so execute previous commands
 			// which rely on the current values first.
-			ASSERT_HR(cmdList->Close());
-			ID3D12CommandList* cmdsLists[] = { cmdList };
-			mCommandQueue->ExecuteCommandLists(_countof(cmdsLists), cmdsLists);
+			if (i != 0)
+			{
+				ASSERT_HR(cmdList->Close());
+				ID3D12CommandList* cmdsLists[] = { cmdList };
+				mCommandQueue->ExecuteCommandLists(_countof(cmdsLists), cmdsLists);
 
 
-			FlushCommandQueue();
+				FlushCommandQueue();
+				ASSERT_HR(listAlloc->Reset()); // Optional, if we don't wan't the memory back
+
+				// A command list can be reset after it has been added to the command queue via ExecuteCommandList.
+				// Reusing the command list reuses memory.
+				if (mIsWireframe)
+				{
+					activePSO = NamedPSO::Default_WF;
+					ASSERT_HR(cmdList->Reset(listAlloc, mPSOs[activePSO].Get()));
+				}
+				else
+				{
+					activePSO = NamedPSO::Default;
+					ASSERT_HR(cmdList->Reset(listAlloc, mPSOs[activePSO].Get()));
+				}
+			}
+
 			UpdateObjectCBs(ritems, i, NUM_CBUFFERS);
 			UpdateMaterialCBs(ritems, i, NUM_CBUFFERS);
-			ASSERT_HR(listAlloc->Reset()); // Optional, if we don't wan't the memory back
-
-			// A command list can be reset after it has been added to the command queue via ExecuteCommandList.
-			// Reusing the command list reuses memory.
-			if (mIsWireframe)
-			{
-				ASSERT_HR(cmdList->Reset(listAlloc, mPSOs["opaque_wireframe"].Get()));
-			}
-			else
-			{
-				ASSERT_HR(cmdList->Reset(listAlloc, mPSOs["opaque"].Get()));
-			}
 
 			cmdList->RSSetViewports(1, &mScreenViewport);
 			cmdList->RSSetScissorRects(1, &mScissorRect);
@@ -884,21 +1016,56 @@ void Spectral::Graphics::GraphicsCore::DrawRenderItems(ID3D12GraphicsCommandList
 
 			// We can now specify all of the drawing related commands.
 		}
-		auto ri = ritems[i];
 
+		// Set PSO required to draw the object
+		auto ri = ritems[i];
+		if (ritems[i]->PSO < NamedPSO::NormalMap) 
+		{ 
+			if (mIsWireframe && activePSO != NamedPSO::Default_WF)
+			{
+				activePSO = NamedPSO::Default_WF;
+				cmdList->SetPipelineState(mPSOs[activePSO].Get());
+			}
+			else if (activePSO != NamedPSO::Default)
+			{
+				activePSO = NamedPSO::Default;
+				cmdList->SetPipelineState(mPSOs[activePSO].Get());
+			}
+		}
+		else if (ritems[i]->PSO < NamedPSO::SkyMap)
+		{
+			if (mIsWireframe && activePSO != NamedPSO::NormalMap_WF)
+			{
+				activePSO = NamedPSO::NormalMap_WF;
+				cmdList->SetPipelineState(mPSOs[activePSO].Get());
+			}
+			else if (activePSO != NamedPSO::NormalMap)
+			{
+				activePSO = NamedPSO::NormalMap;
+				cmdList->SetPipelineState(mPSOs[activePSO].Get());
+			}
+		}
+		else
+		{
+			if (mIsWireframe && activePSO != NamedPSO::SkyMap_WF)
+			{
+				activePSO = NamedPSO::SkyMap_WF;
+				cmdList->SetPipelineState(mPSOs[activePSO].Get());
+			}
+			else if (activePSO != NamedPSO::SkyMap)
+			{
+				activePSO = NamedPSO::SkyMap;
+				cmdList->SetPipelineState(mPSOs[activePSO].Get());
+			}
+		}
+
+		// TODO: This should be refactor to consider that the buffers for the same mesh will be the same.
+		//			- Consider sorting objects by shader used, then by mesh.
 		cmdList->IASetVertexBuffers(0, 1, &ri->Geo->VertexBufferView());
 		cmdList->IASetIndexBuffer(&ri->Geo->IndexBufferView());
 		cmdList->IASetPrimitiveTopology(ri->PrimitiveType);
 
 		cmdList->SetGraphicsRootSignature(mRootSignature.Get());
-
-		ID3D12DescriptorHeap* texDescriptorHeaps[] = { mSrvDescriptorHeap.Get() }; //-------------TODO: MAKE WORK?
-		mCommandList->SetDescriptorHeaps(_countof(texDescriptorHeaps), texDescriptorHeaps);
-
-		CD3DX12_GPU_DESCRIPTOR_HANDLE tex(mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
-		tex.Offset(ri->Mat->DiffuseSrvHeapIndex, mCbvSrvUavDescriptorSize);
-
-		cmdList->SetGraphicsRootDescriptorTable(3, tex);
 
 		ID3D12DescriptorHeap* cbDescriptorHeaps[] = { mCbvHeap.Get() };
 		cmdList->SetDescriptorHeaps(_countof(cbDescriptorHeaps), cbDescriptorHeaps);
@@ -922,21 +1089,29 @@ void Spectral::Graphics::GraphicsCore::DrawRenderItems(ID3D12GraphicsCommandList
 
 		cmdList->SetGraphicsRootDescriptorTable(2, cbvHandle);
 
-		//ID3D12DescriptorHeap* texDescriptorHeaps[] = { mSrvDescriptorHeap.Get() }; //-------------TODO: MAKE WORK?
-		//mCommandList->SetDescriptorHeaps(_countof(texDescriptorHeaps), texDescriptorHeaps);
+		ID3D12DescriptorHeap* texDescriptorHeaps[] = { mSrvDescriptorHeap.Get() };
+		mCommandList->SetDescriptorHeaps(_countof(texDescriptorHeaps), texDescriptorHeaps);
 
-		//CD3DX12_GPU_DESCRIPTOR_HANDLE tex(mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
-		//tex.Offset(ri->Mat->DiffuseSrvHeapIndex, mCbvSrvUavDescriptorSize);
+		// TODO: REMOVE normal map index if it will always be adjacent, or add toggleable support for disparate locations
+		CD3DX12_GPU_DESCRIPTOR_HANDLE tex(mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+		tex.Offset(ri->Mat->DiffuseSrvHeapIndex, mCbvSrvUavDescriptorSize);
 
-		//cmdList->SetGraphicsRootDescriptorTable(3, tex);
+		if (activePSO < NamedPSO::SkyMap)
+			cmdList->SetGraphicsRootDescriptorTable(3, tex);
+		// TODO: Verify this is legal to exclude, then remove.
+		//else 
+		//	cmdList->SetGraphicsRootDescriptorTable(3, mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+		cmdList->SetGraphicsRootDescriptorTable(4, tex);
 
 		cmdList->DrawIndexedInstanced(ri->IndexCount, 1, ri->StartIndexLocation, ri->BaseVertexLocation, 0);
 	}
 
 	// TODO: Clean command list by executing commands before exiting?
+
+	nvtxRangePop();
 }
 
-void Spectral::Graphics::GraphicsCore::BuildRootSignature()
+void GraphicsCore::BuildRootSignature()
 {
 	CD3DX12_DESCRIPTOR_RANGE cbvTable0;
 	cbvTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0);
@@ -947,22 +1122,26 @@ void Spectral::Graphics::GraphicsCore::BuildRootSignature()
 	CD3DX12_DESCRIPTOR_RANGE cbvTable2;
 	cbvTable2.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 2);
 
-	CD3DX12_DESCRIPTOR_RANGE texTable;
-	texTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
+	CD3DX12_DESCRIPTOR_RANGE texTable0;
+	texTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 2, 0); // texture + normal
+
+	CD3DX12_DESCRIPTOR_RANGE texTable1;
+	texTable1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 1); // sky map stored in space1
 
 	// Root parameter can be a table, root descriptor or root constants.
-	CD3DX12_ROOT_PARAMETER slotRootParameter[4];
+	CD3DX12_ROOT_PARAMETER slotRootParameter[5];
 
 	// Create root CBVs.
 	slotRootParameter[0].InitAsDescriptorTable(1, &cbvTable0); // PassCB
 	slotRootParameter[1].InitAsDescriptorTable(1, &cbvTable1); // MatCB
 	slotRootParameter[2].InitAsDescriptorTable(1, &cbvTable2); // ObjCB
-	slotRootParameter[3].InitAsDescriptorTable(1, &texTable, D3D12_SHADER_VISIBILITY_PIXEL); // texture
+	slotRootParameter[3].InitAsDescriptorTable(1, &texTable0, D3D12_SHADER_VISIBILITY_PIXEL); // texture + normal + cubemap
+	slotRootParameter[4].InitAsDescriptorTable(1, &texTable1, D3D12_SHADER_VISIBILITY_PIXEL); // texture + normal + cubemap
 
 	auto staticSamplers = GetStaticSamplers();
 
 	// A root signature is an array of root parameters.
-	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(4, slotRootParameter, (UINT)staticSamplers.size(), staticSamplers.data(),
+	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(5, slotRootParameter, (UINT)staticSamplers.size(), staticSamplers.data(),
 		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
 	// create a root signature with a single slot which points to a descriptor range consisting of a single constant buffer
@@ -981,31 +1160,36 @@ void Spectral::Graphics::GraphicsCore::BuildRootSignature()
 		serializedRootSig->GetBufferSize(), IID_PPV_ARGS(mRootSignature.GetAddressOf())));
 }
 
-void Spectral::Graphics::GraphicsCore::BuildShadersAndInputLayout()
+void GraphicsCore::BuildShadersAndInputLayout()
 {
 	mShaders["standardVS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "VS", "vs_5_1");
 	mShaders["opaquePS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "PS", "ps_5_1");
+	mShaders["standardNormMapVS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "VS_NormalMapped", "vs_5_1");
+	mShaders["opaqueNormMapPS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "PS_NormalMapped", "ps_5_1");
+	mShaders["standardSkyMapVS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "VS_SkyMap", "vs_5_1");
+	mShaders["opaqueSkyMapPS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "PS_SkyMap", "ps_5_1");
 
 	mInputLayout =
 	{
 		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
 		{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-		{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 24, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
+		{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 24, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+		{ "TANGENT", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 32, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
 	};
 }
 
-ID3D12Resource * Spectral::Graphics::GraphicsCore::CurrentBackBuffer() const
+ID3D12Resource* GraphicsCore::CurrentBackBuffer() const
 {
 	return mSwapChainBuffer[mCurrBackBuffer].Get();
 }
 
-D3D12_CPU_DESCRIPTOR_HANDLE Spectral::Graphics::GraphicsCore::CurrentBackBufferView() const
+D3D12_CPU_DESCRIPTOR_HANDLE GraphicsCore::CurrentBackBufferView() const
 {
 	return CD3DX12_CPU_DESCRIPTOR_HANDLE(mRtvHeap->GetCPUDescriptorHandleForHeapStart(),
 		mCurrBackBuffer, mRtvDescriptorSize);
 }
 
-D3D12_CPU_DESCRIPTOR_HANDLE Spectral::Graphics::GraphicsCore::DepthStencilView() const
+D3D12_CPU_DESCRIPTOR_HANDLE GraphicsCore::DepthStencilView() const
 {
 	return mDsvHeap->GetCPUDescriptorHandleForHeapStart();
 }
@@ -1066,7 +1250,7 @@ Microsoft::WRL::ComPtr<ID3D12Resource> GraphicsCore::CreateDefaultBuffer(
 	return defaultBuffer;
 }
 
-void Spectral::Graphics::GraphicsCore::LoadTextures(std::vector<Texture*>& texes)
+void GraphicsCore::LoadTextures(std::vector<Texture*>& texes)
 {
 	ASSERT_HR(mCommandList->Reset(mDirectCmdListAlloc.Get(), nullptr));
 
@@ -1089,7 +1273,7 @@ void Spectral::Graphics::GraphicsCore::LoadTextures(std::vector<Texture*>& texes
 	// Need to also consider using lists with separate uses to maximize GPU throughput.
 }
 
-void Spectral::Graphics::GraphicsCore::SubmitSceneTextures(std::vector<Texture*>& texes, std::vector<short>& viewIndicies)
+void GraphicsCore::SubmitSceneTextures(std::vector<Texture*>& texes, std::vector<short>& viewIndicies)
 {
 	// Temporary for now, since descriptors are set statically
 	assert(texes.size() <= NUM_CBUFFERS);
@@ -1110,10 +1294,20 @@ void Spectral::Graphics::GraphicsCore::SubmitSceneTextures(std::vector<Texture*>
 		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 		srvDesc.Format = texResource->GetDesc().Format;
-		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-		srvDesc.Texture2D.MostDetailedMip = 0;
-		srvDesc.Texture2D.MipLevels = texResource->GetDesc().MipLevels;
-		srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
+		if (texes[i]->Type == Texture::Tex2D)
+		{
+			srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+			srvDesc.Texture2D.MostDetailedMip = 0;
+			srvDesc.Texture2D.MipLevels = texResource->GetDesc().MipLevels;
+			srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
+		}
+		else // Assumed cube map
+		{
+			srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
+			srvDesc.TextureCube.MostDetailedMip = 0;
+			srvDesc.TextureCube.MipLevels = texResource->GetDesc().MipLevels;
+			srvDesc.TextureCube.ResourceMinLODClamp = 0.0f;
+		}
 		md3dDevice->CreateShaderResourceView(texResource.Get(), &srvDesc, handle);
 	}
 
@@ -1128,8 +1322,30 @@ void Spectral::Graphics::GraphicsCore::SubmitSceneTextures(std::vector<Texture*>
 	// TODO: Need to establish policies for when a command list will be open or closed.
 	// Need to also consider using lists with separate uses to maximize GPU throughput.
 
+	// TODO: Move this as it does not make sense to perform here.
 	for (int i = 0; i < texes.size(); ++i)
 		texes[i]->UploadHeap = nullptr;
+}
+
+void GraphicsCore::Resize(int width, int height)
+{
+	mClientWidth = width;
+	mClientHeight = height;
+	ResizeWindow();
+}
+
+void GraphicsCore::SetFullScreen(bool fullscreen)
+{
+	if (fullscreen & !mFullScreen)
+	{
+		ASSERT_HR(mSwapChain->SetFullscreenState(true, nullptr));
+		mFullScreen = true;
+	}
+	else
+	{
+		ASSERT_HR(mSwapChain->SetFullscreenState(false, nullptr));
+		mFullScreen = false;
+	}
 }
 
 // Temporary home
@@ -1141,7 +1357,7 @@ Microsoft::WRL::ComPtr<ID3DBlob> CompileShader(
 {
 	UINT compileFlags = 0;
 #ifndef RELEASE  
-	compileFlags = D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
+	compileFlags = D3DCOMPILE_PREFER_FLOW_CONTROL | D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
 #endif
 
 	HRESULT hr = S_OK;

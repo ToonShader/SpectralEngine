@@ -53,6 +53,18 @@ bool WindowManager::InitWindow(int width, int height, WNDPROC wndProc)
 	return true;
 }
 
+void WindowManager::GetDimensions(int& width, int& height)
+{
+	width = mWindowWidth;
+	height = mWindowHeight;
+}
+
+void WindowManager::SetDimensions(int width, int height)
+{
+	mWindowWidth = width;
+	mWindowHeight = height;
+}
+
 HWND WindowManager::getHandle()
 {
 	return mhMainWindow;

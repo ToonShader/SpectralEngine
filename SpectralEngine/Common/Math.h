@@ -2,7 +2,8 @@
 
 #pragma once
 
-#include<DirectXMath.h>
+#include <DirectXMath.h>
+#include <DirectXCollision.h>
 
 using namespace DirectX;
 

@@ -53,6 +53,5 @@ struct SubMesh
 	UINT StartIndexLocation = 0;
 	INT BaseVertexLocation = 0;
 
-	// For later use
-	// DirectX::BoundingBox Bounds;
+	DirectX::BoundingBox Bounds;
 };

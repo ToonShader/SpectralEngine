@@ -23,6 +23,8 @@
 #include "Mesh.h"
 #include "RenderPacket.h"
 #include "FrameResource.h"
+#include "Common/Camera.h"
+
 extern const int gNumFrameResources;
 
 
@@ -52,7 +54,7 @@ namespace Spectral
 			// /*virtual*/ LRESULT MsgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 			/*virtual*/ void RenderPrePass(/*const Timer& gt*/); /*= 0;*/
 			/*virtual*/ void Render(/*const Timer& gt*/); /*= 0;*/
-			void testrender();
+			void testrender(const Camera& camera);
 			// TODO: Accessors for settings screen states
 
 			Microsoft::WRL::ComPtr<ID3D12Resource> CreateDefaultBuffer(/*ID3D12Device* device, ID3D12GraphicsCommandList* cmdList,*/
@@ -60,8 +62,10 @@ namespace Spectral
 
 			void LoadTextures(std::vector<Texture*>& texes);
 			void SubmitSceneTextures(std::vector<Texture*>& texes, std::vector<short>& viewIndicies);
-				
 
+			void Resize(int width, int height);
+			void SetFullScreen(bool set);
+				
 		private:
 			WNDPROC mProcCallback = nullptr;
 			//HINSTANCE AppInst()const;
@@ -96,6 +100,9 @@ namespace Spectral
 			void UpdateMaterialCBs(const std::vector<RenderPacket*>& packets, int startIndex, int numToUpdate);
 			void UpdateMainPassCB();
 
+			void CullObjectsByFrustum(std::vector<RenderPacket*>& visible, const std::vector<RenderPacket*>& objects,
+				const DirectX::BoundingFrustum& frustum, FXMMATRIX view);
+
 			// Temporary
 			std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> GetStaticSamplers();
 
@@ -117,7 +124,6 @@ namespace Spectral
 			bool      mMinimized = false;
 			bool      mMaximized = false;
 			bool      mFullscreen = false;
-			//bool      mResizing = false;   // Current goal is to make resizing fluid
 
 			// UNIMPLEMENTED: AA support
 			//bool      m4xMsaaState = false;
@@ -149,7 +155,7 @@ namespace Spectral
 			Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> mSrvDescriptorHeap = nullptr;
 
 			std::unordered_map<std::string, Microsoft::WRL::ComPtr<ID3DBlob>> mShaders;
-			std::unordered_map<std::string, Microsoft::WRL::ComPtr<ID3D12PipelineState>> mPSOs;
+			std::vector<Microsoft::WRL::ComPtr<ID3D12PipelineState>> mPSOs;
 
 			std::vector<D3D12_INPUT_ELEMENT_DESC> mInputLayout;
 
@@ -169,9 +175,6 @@ namespace Spectral
 			DirectX::XMFLOAT3 mEyePos = { 0.0f, 0.0f, 0.0f };
 			DirectX::XMFLOAT4X4 mView = Math::XMF4x4Identity();
 			DirectX::XMFLOAT4X4 mProj = Math::XMF4x4Identity();
-			float mTheta = 1.5f*3.14159;
-			float mPhi = 0.35f*3.14159;
-			float mRadius = 20.0f;
 
 			D3D12_VIEWPORT mScreenViewport;
 			D3D12_RECT mScissorRect;
@@ -186,6 +189,8 @@ namespace Spectral
 			//D3D_DRIVER_TYPE md3dDriverType = D3D_DRIVER_TYPE_HARDWARE;
 			DXGI_FORMAT mBackBufferFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
 			DXGI_FORMAT mDepthStencilFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
+
+			bool mFullScreen = false;
 			int mClientWidth = 800;
 			int mClientHeight = 600;
 		};
