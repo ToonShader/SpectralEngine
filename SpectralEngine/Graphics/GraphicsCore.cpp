@@ -7,15 +7,35 @@
 #include <DirectXColors.h>
 #include <d3dcompiler.h>
 #include <d3d12SDKLayers.h>
-#include <nvToolsExt.h>
+//#include <nvToolsExt.h>
 
 //#pragma comment(lib, "d3dcompiler.lib")
 #pragma comment(lib, "D3D12.lib")
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "d3dcompiler.lib")
 
+//using namespace SpectralEditor;
+
+using namespace Platform;
+using namespace Windows::Foundation;
+using namespace Windows::Foundation::Collections;
+using namespace Windows::Graphics::Display;
+using namespace Windows::System::Threading;
+using namespace Windows::UI::Core;
+using namespace Windows::UI::Input;
+using namespace Windows::UI::Xaml;
+using namespace Windows::UI::Xaml::Controls;
+using namespace Windows::UI::Xaml::Controls::Primitives;
+using namespace Windows::UI::Xaml::Data;
+using namespace Windows::UI::Xaml::Input;
+using namespace Windows::UI::Xaml::Media;
+using namespace Windows::UI::Xaml::Navigation;
+//using namespace concurrency;
+
+#include <windows.ui.xaml.media.dxinterop.h>
+
 // Simple toggle for benchmarking to disable debug layers
-#define RELEASE
+//#define RELEASE
 
 
 #ifndef RELEASE
@@ -52,6 +72,7 @@ GraphicsCore::~GraphicsCore()
 		delete mCurrFrameResource;
 }
 
+#ifdef WINDOWS
 GraphicsCore* GraphicsCore::GetGraphicsCoreInstance(HWND renderWindow)
 {
 	if (renderWindow == nullptr || mGraphicsCore != nullptr)
@@ -62,6 +83,18 @@ GraphicsCore* GraphicsCore::GetGraphicsCoreInstance(HWND renderWindow)
 	mGraphicsCore->Initialize();
 	return mGraphicsCore;
 }
+#else
+GraphicsCore* GraphicsCore::GetGraphicsCoreInstance(Windows::UI::Xaml::Controls::SwapChainPanel^ panel)
+{
+	if (mGraphicsCore != nullptr)
+		return mGraphicsCore;
+
+	mGraphicsCore = new GraphicsCore();
+	mGraphicsCore->mSwapChainPanel = panel;
+	mGraphicsCore->Initialize();
+	return mGraphicsCore;
+}
+#endif
 
 bool GraphicsCore::DestroyGraphicsCoreInstance()
 {
@@ -228,7 +261,7 @@ void GraphicsCore::RenderPrePass()
 
 void GraphicsCore::testrender(const Camera& camera)
 {
-	nvtxRangePushW(L"Scene Render");
+	//nvtxRangePushW(L"Scene Render");
 
 	DirectX::XMStoreFloat4x4(&mProj, camera.GetProj());
 	DirectX::XMStoreFloat4x4(&mView, camera.GetView());
@@ -282,7 +315,7 @@ void GraphicsCore::testrender(const Camera& camera)
 	mCommandList->ClearRenderTargetView(CurrentBackBufferView(), Colors::LightSteelBlue, 0, nullptr);
 	mCommandList->ClearDepthStencilView(DepthStencilView(), D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
 
-	// Specify the buffers we are going to render to.
+	// Specify the buffers we are going to crerender to.
 	mCommandList->OMSetRenderTargets(1, &CurrentBackBufferView(), true, &DepthStencilView());
 
 	//ID3D12DescriptorHeap* descriptorHeaps[] = { mCbvHeap.Get() };
@@ -326,7 +359,7 @@ void GraphicsCore::testrender(const Camera& camera)
 
 #pragma endregion
 
-	nvtxRangePop();
+	//nvtxRangePop();
 }
 
 #define D3DCOMPILE_DEBUG 1
@@ -482,23 +515,44 @@ void GraphicsCore::CreateSwapChain()
 	scDesc.Width = mClientWidth;
 	scDesc.Height = mClientHeight;
 	scDesc.Format = mBackBufferFormat;
-	scDesc.Scaling = DXGI_SCALING_NONE;
+	scDesc.Scaling = DXGI_SCALING_STRETCH;
 	scDesc.SampleDesc.Count = 1; //m4xMsaaState ? 4 : 1;
 	scDesc.SampleDesc.Quality = 0; //m4xMsaaState ? (m4xMsaaQuality - 1) : 0;
 	scDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 	scDesc.BufferCount = SWAP_CHAIN_BUFFER_COUNT;
-	scDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+	scDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
 	scDesc.Flags = 0;
 
 	// Note: Swap chain flushes queue
 	// Note: This is where initial fullscreen will need to be established
+#ifdef WINDOWS
 	ASSERT_HR(mdxgiFactory->CreateSwapChainForHwnd(mCommandQueue.Get(), mhRenderWindow, &scDesc,
 		nullptr, nullptr, mSwapChain.GetAddressOf()));
+#else
+	//auto blah = reinterpret_cast<IUnknown*>(Window::Current->CoreWindow);
+	ASSERT_HR(mdxgiFactory->CreateSwapChainForComposition(mCommandQueue.Get(), &scDesc, nullptr, &mSwapChain));
+	// Associate swap chain with SwapChainPanel
+	// UI changes will need to be dispatched back to the UI thread
+	mSwapChainPanel->Dispatcher->RunAsync(CoreDispatcherPriority::High, ref new DispatchedHandler([=]()
+	{
+		// Get backing native interface for SwapChainPanel
+		Microsoft::WRL::ComPtr<ISwapChainPanelNative> panelNative;
+		ASSERT_HR(reinterpret_cast<IUnknown*>(mSwapChainPanel)->QueryInterface(IID_PPV_ARGS(&panelNative)));
+
+		ASSERT_HR(panelNative->SetSwapChain(mSwapChain.Get()));
+	}, CallbackContext::Any));
+
+	// Ensure that DXGI does not queue more than one frame at a time. This both reduces latency and
+	// ensures that the application will only render after each VSync, minimizing power consumption.
+	//Microsoft::WRL::ComPtr<IDXGIDevice> dxgiDevice;
+	//ASSERT_HR(md3dDevice.As(&dxgiDevice));
+	//ASSERT_HR(dxgiDevice->SetMaximumFrameLatency(1));
+#endif
 }
 
 void GraphicsCore::FlushCommandQueue()
 {
-	nvtxRangePushW(L"Flush CQ");
+	//nvtxRangePushW(L"Flush CQ");
 
 	// Mark new fence value
 	mCurrentFence++;
@@ -522,12 +576,12 @@ void GraphicsCore::FlushCommandQueue()
 		CloseHandle(eventHandle);
 	}*/
 
-	nvtxRangePop();
+	//nvtxRangePop();
 }
 
 void GraphicsCore::UpdateObjectCBs(const std::vector<RenderPacket*>& packets, int startIndex, int numToUpdate)
 {
-	nvtxRangePushW(L"Update OCBs");
+	//nvtxRangePushW(L"Update OCBs");
 
 	assert(numToUpdate <= NUM_CBUFFERS);
 	auto currObjectCB = mCurrFrameResource->ObjectCB.get();
@@ -554,12 +608,12 @@ void GraphicsCore::UpdateObjectCBs(const std::vector<RenderPacket*>& packets, in
 		//}
 	}
 
-	nvtxRangePop();
+	//nvtxRangePop();
 }
 
 void GraphicsCore::UpdateMaterialCBs(const std::vector<RenderPacket*>& packets, int startIndex, int numToUpdate)
 {
-	nvtxRangePushW(L"Update MCBs");
+	//nvtxRangePushW(L"Update MCBs");
 
 	assert(numToUpdate <= NUM_CBUFFERS);
 	auto currMaterialCB = mCurrFrameResource->MaterialCB.get();
@@ -586,12 +640,12 @@ void GraphicsCore::UpdateMaterialCBs(const std::vector<RenderPacket*>& packets, 
 		//}
 	}
 
-	nvtxRangePop();
+	//nvtxRangePop();
 }
 
 void GraphicsCore::UpdateMainPassCB()
 {
-	nvtxRangePushW(L"Update MPCB");
+	//nvtxRangePushW(L"Update MPCB");
 
 	// This is overkill for now, but may prove useful in the future if
 	// I decide to keep per-pass CBs
@@ -684,7 +738,7 @@ void GraphicsCore::UpdateMainPassCB()
 	auto currPassCB = mCurrFrameResource->PassCB.get();
 	currPassCB->CopyData(0, mMainPassCB);
 
-	nvtxRangePop();
+	//nvtxRangePop();
 }
 
 void Spectral::Graphics::GraphicsCore::CullObjectsByFrustum(std::vector<RenderPacket*>& visible, const std::vector<RenderPacket*>& objects, const DirectX::BoundingFrustum& frustum, FXMMATRIX view)
@@ -965,7 +1019,7 @@ void GraphicsCore::BuildFrameResources()
 
 void GraphicsCore::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, ID3D12CommandAllocator* listAlloc, const std::vector<RenderPacket*>& ritems)
 {
-	nvtxRangePushW(L"Draw Items");
+	//nvtxRangePushW(L"Draw Items");
 
 	UINT objCBByteSize = CalcConstantBufferByteSize(sizeof(ObjectConstants));
 
@@ -1108,7 +1162,7 @@ void GraphicsCore::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, ID3D12Com
 
 	// TODO: Clean command list by executing commands before exiting?
 
-	nvtxRangePop();
+	//nvtxRangePop();
 }
 
 void GraphicsCore::BuildRootSignature()
@@ -1162,6 +1216,8 @@ void GraphicsCore::BuildRootSignature()
 
 void GraphicsCore::BuildShadersAndInputLayout()
 {
+	wchar_t blah[500];
+	GetCurrentDirectory(500, blah);
 	mShaders["standardVS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "VS", "vs_5_1");
 	mShaders["opaquePS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "PS", "ps_5_1");
 	mShaders["standardNormMapVS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "VS_NormalMapped", "vs_5_1");

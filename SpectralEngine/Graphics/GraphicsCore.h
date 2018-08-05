@@ -46,7 +46,12 @@ namespace Spectral
 			GraphicsCore& operator=(const GraphicsCore& rhs) = delete;
 
 		public:
+#ifdef WINDOWS
 			static GraphicsCore* GetGraphicsCoreInstance(HWND renderWindow = nullptr);
+#else
+			static GraphicsCore* GetGraphicsCoreInstance(Windows::UI::Xaml::Controls::SwapChainPanel^ panel);
+			Windows::UI::Xaml::Controls::SwapChainPanel^ mSwapChainPanel;
+#endif
 			static bool DestroyGraphicsCoreInstance();
 			// Potential Feature: Support runtime switching of render window
 
@@ -67,7 +72,9 @@ namespace Spectral
 			void SetFullScreen(bool set);
 				
 		private:
+#ifdef WINDOWS
 			WNDPROC mProcCallback = nullptr;
+#endif
 			//HINSTANCE AppInst()const;
 			//HWND      MainWnd()const;
 			//float     AspectRatio()const;
