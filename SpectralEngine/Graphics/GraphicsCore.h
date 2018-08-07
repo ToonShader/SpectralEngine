@@ -46,7 +46,7 @@ namespace Spectral
 			GraphicsCore& operator=(const GraphicsCore& rhs) = delete;
 
 		public:
-#ifdef WINDOWS
+#if WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP)
 			static GraphicsCore* GetGraphicsCoreInstance(HWND renderWindow = nullptr);
 #else
 			static GraphicsCore* GetGraphicsCoreInstance(Windows::UI::Xaml::Controls::SwapChainPanel^ panel);
@@ -72,7 +72,7 @@ namespace Spectral
 			void SetFullScreen(bool set);
 				
 		private:
-#ifdef WINDOWS
+#if WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP)
 			WNDPROC mProcCallback = nullptr;
 #endif
 			//HINSTANCE AppInst()const;

@@ -33,6 +33,7 @@
     <ClInclude Include="Graphics\RenderPacket.h" />
     <ClInclude Include="Microsoft\d3dx12.h" />
     <ClInclude Include="Microsoft\DDSTextureLoader.h" />
+    <ClInclude Include="Scene\SceneManager.h" />
     <ClInclude Include="TEMP\Common\GeometryGenerator.h" />
     <None Include="TEMP\FrameResource.h" />
   </ItemGroup>
@@ -47,6 +48,7 @@
     <ClCompile Include="Graphics\RenderPacket.cpp" />
     <ClCompile Include="Microsoft\DDSTextureLoader.cpp" />
     <ClCompile Include="Run.cpp" />
+    <ClCompile Include="Scene\SceneManager.cpp" />
     <ClCompile Include="TEMP\Common\GeometryGenerator.cpp" />
     <None Include="TEMP\FrameResource.cpp" />
     <None Include="TEMP\TexColumnsApp.cpp" />
@@ -61,6 +63,7 @@
   <ItemGroup>
     <None Include="Shaders\Default.hlsl">
       <FileType>Document</FileType>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">5.1</ShaderModel>
     </None>
     <None Include="Shaders\LightingUtil.hlsl">
       <FileType>Document</FileType>
@@ -71,6 +74,14 @@
       <FileType>Document</FileType>
     </None>
     <None Include="TEMP\LightingUtil.hlsl">
+      <FileType>Document</FileType>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Shaders\Common.hlsl">
+      <FileType>Document</FileType>
+    </None>
+    <None Include="Shaders\Sky.hlsl">
       <FileType>Document</FileType>
     </None>
   </ItemGroup>
@@ -151,6 +162,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <FxCompile>
       <EntryPointName>main</EntryPointName>

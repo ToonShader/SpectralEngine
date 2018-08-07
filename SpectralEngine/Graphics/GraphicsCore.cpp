@@ -16,6 +16,7 @@
 
 //using namespace SpectralEditor;
 
+#if !WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP)
 using namespace Platform;
 using namespace Windows::Foundation;
 using namespace Windows::Foundation::Collections;
@@ -33,6 +34,7 @@ using namespace Windows::UI::Xaml::Navigation;
 //using namespace concurrency;
 
 #include <windows.ui.xaml.media.dxinterop.h>
+#endif
 
 // Simple toggle for benchmarking to disable debug layers
 //#define RELEASE
@@ -72,7 +74,7 @@ GraphicsCore::~GraphicsCore()
 		delete mCurrFrameResource;
 }
 
-#ifdef WINDOWS
+#if WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP)
 GraphicsCore* GraphicsCore::GetGraphicsCoreInstance(HWND renderWindow)
 {
 	if (renderWindow == nullptr || mGraphicsCore != nullptr)
@@ -520,12 +522,12 @@ void GraphicsCore::CreateSwapChain()
 	scDesc.SampleDesc.Quality = 0; //m4xMsaaState ? (m4xMsaaQuality - 1) : 0;
 	scDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 	scDesc.BufferCount = SWAP_CHAIN_BUFFER_COUNT;
-	scDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
+	scDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
 	scDesc.Flags = 0;
 
 	// Note: Swap chain flushes queue
 	// Note: This is where initial fullscreen will need to be established
-#ifdef WINDOWS
+#if WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP)
 	ASSERT_HR(mdxgiFactory->CreateSwapChainForHwnd(mCommandQueue.Get(), mhRenderWindow, &scDesc,
 		nullptr, nullptr, mSwapChain.GetAddressOf()));
 #else
@@ -1216,8 +1218,6 @@ void GraphicsCore::BuildRootSignature()
 
 void GraphicsCore::BuildShadersAndInputLayout()
 {
-	wchar_t blah[500];
-	GetCurrentDirectory(500, blah);
 	mShaders["standardVS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "VS", "vs_5_1");
 	mShaders["opaquePS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "PS", "ps_5_1");
 	mShaders["standardNormMapVS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "VS_NormalMapped", "vs_5_1");
