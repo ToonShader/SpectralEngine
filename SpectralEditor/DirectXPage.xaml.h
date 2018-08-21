@@ -54,6 +54,8 @@ namespace SpectralEditor
 		//std::shared_ptr<DX::DeviceResources> m_deviceResources;
 		std::unique_ptr<SpectralEditorMain> m_main; 
 		bool m_windowVisible;
+
+		int ActivePointerButton = 0;
 	};
 }
 

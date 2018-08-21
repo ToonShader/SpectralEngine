@@ -214,6 +214,7 @@
     <ClInclude Include="..\SpectralEngine\Graphics\RenderPacket.h" />
     <ClInclude Include="..\SpectralEngine\Microsoft\d3dx12.h" />
     <ClInclude Include="..\SpectralEngine\Microsoft\DDSTextureLoader.h" />
+    <ClInclude Include="..\SpectralEngine\Scene\SceneManager.h" />
     <ClInclude Include="..\SpectralEngine\TEMP\Common\GeometryGenerator.h" />
     <ClInclude Include="App.xaml.h">
       <DependentUpon>App.xaml</DependentUpon>
@@ -240,6 +241,7 @@
     <ClCompile Include="..\SpectralEngine\Graphics\Mesh.cpp" />
     <ClCompile Include="..\SpectralEngine\Graphics\RenderPacket.cpp" />
     <ClCompile Include="..\SpectralEngine\Microsoft\DDSTextureLoader.cpp" />
+    <ClCompile Include="..\SpectralEngine\Scene\SceneManager.cpp" />
     <ClCompile Include="..\SpectralEngine\TEMP\Common\GeometryGenerator.cpp" />
     <ClCompile Include="App.xaml.cpp">
       <DependentUpon>App.xaml</DependentUpon>

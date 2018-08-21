@@ -102,6 +102,9 @@
     <ClCompile Include="..\SpectralEngine\Microsoft\DDSTextureLoader.cpp">
       <Filter>Engine</Filter>
     </ClCompile>
+    <ClCompile Include="..\SpectralEngine\Scene\SceneManager.cpp">
+      <Filter>Engine</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="App.xaml.h" />
@@ -151,6 +154,9 @@
       <Filter>Engine</Filter>
     </ClInclude>
     <ClInclude Include="Run.h" />
+    <ClInclude Include="..\SpectralEngine\Scene\SceneManager.h">
+      <Filter>Engine</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Image Include="Assets\StoreLogo.png">

@@ -5,6 +5,7 @@
 
 #include "pch.h"
 #include "DirectXPage.xaml.h"
+#include "Run.h"
 
 using namespace SpectralEditor;
 
@@ -165,6 +166,22 @@ void DirectXPage::OnPointerPressed(Object^ sender, PointerEventArgs^ e)
 {
 	// When the pointer is pressed begin tracking the pointer movement.
 	//m_main->StartTracking();
+
+	if (e->CurrentPoint->PointerDevice->PointerDeviceType == Windows::Devices::Input::PointerDeviceType::Mouse)
+	{
+		auto properties = e->CurrentPoint->Properties;
+		if (properties->IsLeftButtonPressed)
+			ActivePointerButton = 1;
+		else if (properties->IsRightButtonPressed)
+			ActivePointerButton = 2;
+		else if (properties->IsMiddleButtonPressed)
+			ActivePointerButton = 3;
+
+		auto point = e->CurrentPoint->Position;
+		OnMouseDown(ActivePointerButton, point.X, point.Y);
+	}
+
+	e->Handled = true;
 }
 
 void DirectXPage::OnPointerMoved(Object^ sender, PointerEventArgs^ e)
@@ -174,12 +191,26 @@ void DirectXPage::OnPointerMoved(Object^ sender, PointerEventArgs^ e)
 	//{
 	//	m_main->TrackingUpdate(e->CurrentPoint->Position.X);
 	//}
+
+	if (ActivePointerButton)
+	{
+		auto pos = e->CurrentPoint->Position;
+		OnMouseMove(ActivePointerButton, pos.X, pos.Y);
+	}
+
+	e->Handled = true;
 }
 
 void DirectXPage::OnPointerReleased(Object^ sender, PointerEventArgs^ e)
 {
 	// Stop tracking pointer movement when the pointer is released.
 	//m_main->StopTracking();
+
+	auto pos = e->CurrentPoint->Position;
+	OnMouseUp(ActivePointerButton, pos.X, pos.Y);
+	ActivePointerButton = 0;
+
+	e->Handled = true;
 }
 
 void DirectXPage::OnCompositionScaleChanged(SwapChainPanel^ sender, Object^ args)
