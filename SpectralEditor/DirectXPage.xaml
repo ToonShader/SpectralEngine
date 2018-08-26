@@ -5,23 +5,86 @@
     xmlns:local="using:SpectralEditor"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:controls="using:VisualStudioShell.Controls"
+    xmlns:wrapPanel="using:Microsoft.Toolkit.Uwp.UI.Controls.WrapPanel"
+    xmlns:controls1="using:Microsoft.Toolkit.Uwp.UI.Controls"
     mc:Ignorable="d"
     Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
 
-  <SwapChainPanel x:Name="swapChainPanel">
-    <TextBlock Text="Hello from XAML!"
-               HorizontalAlignment="Right"
-               VerticalAlignment="Top"
-               FontSize="30" />
-  </SwapChainPanel>
 
-  <Page.BottomAppBar>
-    <AppBar x:Name="bottomAppBar" Padding="10,0,10,0">
-      <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
-        <AppBarButton AutomationProperties.Name="Sample Button"
-                      AutomationProperties.AutomationId="SampleAppBarButton"
-                      Click="AppBarButton_Click"/>
-      </StackPanel>
-    </AppBar>
-  </Page.BottomAppBar>
+    <Grid x:Name="mainGrid" Background="Red" MinWidth="800" MinHeight="600" >
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition/>
+        </Grid.RowDefinitions>
+
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition/>
+            <ColumnDefinition Width="Auto"/>
+        </Grid.ColumnDefinitions>
+
+
+        <Grid Grid.Row="0" Grid.ColumnSpan="2" VerticalAlignment="Top" Background="DarkSlateGray">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <StackPanel Orientation="Horizontal">
+                <StackPanel.Resources>
+                    <Style TargetType="Button" />
+                </StackPanel.Resources>
+                <!--Menu-->
+                <Button Content="File">
+                    <Button.Flyout>
+                        <MenuFlyout>
+                            <MenuFlyoutSubItem Text="New">
+                                <MenuFlyoutItem Text="Project"/>
+                                <MenuFlyoutItem Text="Website"/>
+                            </MenuFlyoutSubItem>
+                            <MenuFlyoutSeparator/>
+                            <MenuFlyoutItem Text="Close Solution"/>
+                            <MenuFlyoutSeparator/>
+                            <MenuFlyoutItem Text="Save"/>
+                            <MenuFlyoutItem Text="Save All"/>
+                            <MenuFlyoutSeparator/>
+                            <MenuFlyoutItem Text="Exit"/>
+                        </MenuFlyout>
+                    </Button.Flyout>
+                </Button>
+                <Button Content="Edit" IsEnabled="True"/>
+                <Button Content="View" IsEnabled="True"/>
+                <Button Content="Project" IsEnabled="True"/>
+                <Button Content="Build" IsEnabled="True"/>
+                <Button Content="Debug" IsEnabled="True"/>
+                <Button Content="Team" IsEnabled="True"/>
+                <Button Content="Tools">
+                    <Button.Flyout>
+                        <MenuFlyout AllowFocusOnInteraction="True">
+                            <MenuFlyoutItem Text="Extensions and Updates" IsEnabled="False" />
+                            <MenuFlyoutItem Text="Connect to Database..." IsEnabled="False" />
+                            <MenuFlyoutSeparator/>
+                            <MenuFlyoutItem Text="Options..." />
+                        </MenuFlyout>
+                    </Button.Flyout>
+                </Button>
+                <Button Content="Test" IsEnabled="False"/>
+                <Button Content="Analyze" IsEnabled="False"/>
+                <Button Content="Window" IsEnabled="False"/>
+                <Button Content="Help" IsEnabled="False"/>
+            </StackPanel>
+        </Grid>
+
+
+
+
+
+        <SwapChainPanel x:Name="swapChainPanel" Grid.Row="1" Grid.Column="0"/>
+        <VariableSizedWrapGrid Orientation="Horizontal" ItemWidth="150" ItemHeight="150" MaximumRowsOrColumns="2" Background="Green" Grid.Row="1" Grid.Column="1" Width="300">
+            <TextBlock Text="Sphere"/>
+            <TextBlock Text="Box"/>
+            <TextBlock Text="Plane"/>
+            <TextBlock Text="Cylinder"/>
+        </VariableSizedWrapGrid>
+    </Grid>
 </Page>

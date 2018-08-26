@@ -27,6 +27,8 @@
 #pragma comment(lib, "dxguid.lib")
 //#pragma comment(lib, "dxgidebug.lib")
 
+Concurrency::critical_section gUpdateLock;
+
 Spectral::Graphics::GraphicsCore* gGraphicsCore = nullptr;
 
 void CalculateFrameStats(Timer& timer, HWND hWnd);
@@ -87,10 +89,11 @@ void AppDraw(Windows::UI::Xaml::Controls::SwapChainPanel^ swapChainPanel)
 		gSceneCamera.LookAt(XMFLOAT3(x, y, z), XMFLOAT3(0.0f, 0.0f, 0.0f), XMFLOAT3(0.0f, 1.0f, 0.0f));
 		#endif
 
-		
+		gUpdateLock.lock();
 		gSceneCamera.UpdateViewMatrix();
 		gScene.UpdateScene(timer.DeltaTime(), gSceneCamera);
 		gScene.DrawScene();
+		gUpdateLock.unlock();
 
 		timer.Tick();
 
@@ -135,6 +138,7 @@ void OnMouseUp(int btnState, int x, int y)
 
 void OnMouseMove(int btnState, int x, int y)
 {
+	gUpdateLock.lock();
 	if (btnState == 1)
 	{
 		float dx = (x - gLastMousePos.x) / 600.0f;
@@ -171,6 +175,8 @@ void OnMouseMove(int btnState, int x, int y)
 
 	gLastMousePos.x = x;
 	gLastMousePos.y = y;
+
+	gUpdateLock.unlock();
 }
 
 /*

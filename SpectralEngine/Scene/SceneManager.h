@@ -26,4 +26,7 @@ private:
 	std::vector<std::unique_ptr<RenderPacket>> mAllRitems;
 
 	Camera mSceneCamera;
+
+	RenderPacket* ActiveObject = nullptr;
+	void AddObject();
 };

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <concrt.h>
 
 void AppDraw(Windows::UI::Xaml::Controls::SwapChainPanel^ panel);
 
