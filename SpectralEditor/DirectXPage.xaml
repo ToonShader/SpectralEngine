@@ -79,9 +79,14 @@
 
 
 
-        <SwapChainPanel x:Name="swapChainPanel" Grid.Row="1" Grid.Column="0"/>
-        <VariableSizedWrapGrid Orientation="Horizontal" ItemWidth="150" ItemHeight="150" MaximumRowsOrColumns="2" Background="Green" Grid.Row="1" Grid.Column="1" Width="300">
-            <TextBlock Text="Sphere"/>
+        <SwapChainPanel x:Name="swapChainPanel" Grid.Row="1" Grid.Column="0">
+            <SwapChainPanel.ColumnDefinitions>
+                <ColumnDefinition Width="110*"/>
+                <ColumnDefinition Width="1091*"/>
+            </SwapChainPanel.ColumnDefinitions>
+        </SwapChainPanel>
+        <VariableSizedWrapGrid x:Name="objectPickerGrid" Orientation="Horizontal" ItemWidth="150" ItemHeight="150" MaximumRowsOrColumns="2" Background="Green" Grid.Row="1" Grid.Column="1" Width="300">
+            <TextBlock Text="Sphere" PointerPressed="ObjectPanel_PointerPressed"/>
             <TextBlock Text="Box"/>
             <TextBlock Text="Plane"/>
             <TextBlock Text="Cylinder"/>

@@ -201,6 +201,7 @@
     <Image Include="Assets\Wide310x150Logo.scale-200.png" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\SpectralEngine\Asset_Conditioning\ObjectConditioner.h" />
     <ClInclude Include="..\SpectralEngine\Common\Camera.h" />
     <ClInclude Include="..\SpectralEngine\Common\Math.h" />
     <ClInclude Include="..\SpectralEngine\Common\Timer.h" />
@@ -233,6 +234,7 @@
     <ClInclude Include="pch.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\SpectralEngine\Asset_Conditioning\ObjectConditioner.cpp" />
     <ClCompile Include="..\SpectralEngine\Common\Camera.cpp" />
     <ClCompile Include="..\SpectralEngine\Common\Math.cpp" />
     <ClCompile Include="..\SpectralEngine\Common\Timer.cpp" />

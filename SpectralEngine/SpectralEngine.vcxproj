@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -19,6 +19,8 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Asset_Conditioning\ObjectConditioner.h" />
+    <ClInclude Include="Asset_Conditioning\tiny_obj_loader.h" />
     <ClInclude Include="Common\Camera.h" />
     <ClInclude Include="Common\Math.h" />
     <ClInclude Include="Common\Timer.h" />
@@ -38,6 +40,7 @@
     <None Include="TEMP\FrameResource.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Asset_Conditioning\ObjectConditioner.cpp" />
     <ClCompile Include="Common\Camera.cpp" />
     <ClCompile Include="Common\Math.cpp" />
     <ClCompile Include="Common\Timer.cpp" />
@@ -90,7 +93,7 @@
     <ProjectGuid>{F74C5BF5-1079-454E-93FF-EE798FB5A65F}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>SpectralEngine</RootNamespace>
-    <WindowsTargetPlatformVersion>10.0.16299.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0.17134.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">

@@ -49,6 +49,8 @@ struct Mesh
 
 struct SubMesh
 {
+	std::string Name;
+
 	UINT IndexCount = 0;
 	UINT StartIndexLocation = 0;
 	INT BaseVertexLocation = 0;

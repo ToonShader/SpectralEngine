@@ -1,3 +1,5 @@
+#pragma once
+
 #include "Graphics/GraphicsCore.h"
 #include "Common/Camera.h"
 
@@ -10,6 +12,7 @@ public:
 	void Initialize(Spectral::Graphics::GraphicsCore* graphicsCore);
 	void UpdateScene(float dt, Camera camera);
 	void DrawScene();
+	void AddObject();
 
 private:
 	//void CalculateFrameStats(Timer& timer, HWND hWnd);
@@ -28,5 +31,5 @@ private:
 	Camera mSceneCamera;
 
 	RenderPacket* ActiveObject = nullptr;
-	void AddObject();
+
 };

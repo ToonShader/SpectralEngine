@@ -84,6 +84,10 @@ DirectXPage::DirectXPage():
 
 	m_main = std::unique_ptr<SpectralEditorMain>(new SpectralEditorMain());
 	m_main->StartRenderLoop(swapChainPanel);
+
+
+	// Start my stuff - - - -
+	LoadObjects();
 }
 
 DirectXPage::~DirectXPage()
@@ -213,6 +217,11 @@ void DirectXPage::OnPointerReleased(Object^ sender, PointerEventArgs^ e)
 	e->Handled = true;
 }
 
+void DirectXPage::LoadObjects()
+{
+	// TODO: Load all objects in directory
+}
+
 void DirectXPage::OnCompositionScaleChanged(SwapChainPanel^ sender, Object^ args)
 {
 	critical_section::scoped_lock lock(m_main->GetCriticalSection());
@@ -225,4 +234,12 @@ void DirectXPage::OnSwapChainPanelSizeChanged(Object^ sender, SizeChangedEventAr
 	critical_section::scoped_lock lock(m_main->GetCriticalSection());
 	//m_deviceResources->SetLogicalSize(e->NewSize);
 	m_main->CreateWindowSizeDependentResources();
+}
+
+void SpectralEditor::DirectXPage::ObjectPanel_PointerPressed(Platform::Object^ sender, Windows::UI::Xaml::Input::PointerRoutedEventArgs^ e)
+{
+	gUpdateLock.lock();
+	gScene.AddObject();
+	gUpdateLock.unlock();
+	e->Handled = true;
 }

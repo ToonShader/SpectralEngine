@@ -1,6 +1,11 @@
 #pragma once
 
 #include <concrt.h>
+#include "Scene\SceneManager.h"
+
+// Temporary connection
+extern SceneManager gScene;
+extern Concurrency::critical_section gUpdateLock;
 
 void AppDraw(Windows::UI::Xaml::Controls::SwapChainPanel^ panel);
 

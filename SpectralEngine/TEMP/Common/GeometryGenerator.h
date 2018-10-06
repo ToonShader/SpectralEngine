@@ -57,6 +57,7 @@ public:
 	{
 		std::vector<Vertex> Vertices;
         std::vector<uint32> Indices32;
+		std::string Name;
 
         std::vector<uint16>& GetIndices16()
         {

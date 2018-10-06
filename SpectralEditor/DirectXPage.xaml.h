@@ -56,6 +56,9 @@ namespace SpectralEditor
 		bool m_windowVisible;
 
 		int ActivePointerButton = 0;
+
+		void LoadObjects();
+		void ObjectPanel_PointerPressed(Platform::Object^ sender, Windows::UI::Xaml::Input::PointerRoutedEventArgs^ e);
 	};
 }
 

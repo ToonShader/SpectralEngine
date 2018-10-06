@@ -105,6 +105,9 @@
     <ClCompile Include="..\SpectralEngine\Scene\SceneManager.cpp">
       <Filter>Engine</Filter>
     </ClCompile>
+    <ClCompile Include="..\SpectralEngine\Asset_Conditioning\ObjectConditioner.cpp">
+      <Filter>Engine</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="App.xaml.h" />
@@ -155,6 +158,9 @@
     </ClInclude>
     <ClInclude Include="Run.h" />
     <ClInclude Include="..\SpectralEngine\Scene\SceneManager.h">
+      <Filter>Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="..\SpectralEngine\Asset_Conditioning\ObjectConditioner.h">
       <Filter>Engine</Filter>
     </ClInclude>
   </ItemGroup>
