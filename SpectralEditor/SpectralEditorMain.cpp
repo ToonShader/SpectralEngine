@@ -59,7 +59,7 @@ void SpectralEditorMain::StartRenderLoop(Windows::UI::Xaml::Controls::SwapChainP
 		{
 			critical_section::scoped_lock lock(m_criticalSection);
 			if (m_timer.GetFrameCount() != 0)
-				AppDraw(mPanel);
+				AppDraw();
 			Update();
 			/*if (Render())
 			{

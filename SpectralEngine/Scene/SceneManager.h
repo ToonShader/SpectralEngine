@@ -9,10 +9,15 @@ public:
 	SceneManager();
 	~SceneManager();
 
+	void SetObjectFiles(const std::vector<std::string>& objFiles);
 	void Initialize(Spectral::Graphics::GraphicsCore* graphicsCore);
 	void UpdateScene(float dt, Camera camera);
 	void DrawScene();
-	void AddObject();
+	void AddObject(const std::string& object, const std::string& material = "default", NamedPSO PSO = NamedPSO::Default);
+	bool IsReady();
+	void GetAvailableObjects(std::vector<std::string>& objects);
+	//void GetAvailableTextures(std::vector<std::string>& objects);
+	void GetAvailableMaterials(std::vector<std::string>& objects);
 
 private:
 	//void CalculateFrameStats(Timer& timer, HWND hWnd);
@@ -31,5 +36,9 @@ private:
 	Camera mSceneCamera;
 
 	RenderPacket* ActiveObject = nullptr;
+	std::vector<std::string> mObjectFiles;
+	//std::vector<std::string> mAvailableObjects;
+	//std::vector<std::string> mAvailableMaterials;
 
+	bool mReady = false;
 };

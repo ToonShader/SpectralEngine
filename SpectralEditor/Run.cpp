@@ -51,7 +51,22 @@ float radius = 60.0f;
 #endif
 
 static bool init = false;
-void AppDraw(Windows::UI::Xaml::Controls::SwapChainPanel^ swapChainPanel)
+void Initialize(Windows::UI::Xaml::Controls::SwapChainPanel^ swapChainPanel)
+{
+	int width = 800, height = 600;
+	gGraphicsCore = Spectral::Graphics::GraphicsCore::GetGraphicsCoreInstance(swapChainPanel);
+
+	gScene.Initialize(gGraphicsCore);
+	init = true;
+	timer.Reset();
+
+	//gWindow->GetDimensions(width, height);
+	gSceneCamera.SetLens(0.25f * XM_PI, static_cast<float>(width) / height, 1.0f, 1000.0f);
+	gSceneCamera.LookAt(XMFLOAT3(0, 18, -60), XMFLOAT3(0, 18, -59), XMFLOAT3(0.0f, 1.0f, 0.0f));
+	gSceneCamera.UpdateViewMatrix();
+}
+
+void AppDraw()
 {
 #ifndef RELEASE
 	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
@@ -59,19 +74,7 @@ void AppDraw(Windows::UI::Xaml::Controls::SwapChainPanel^ swapChainPanel)
 
 	// Scope the main message pump so that we can check for memory leaks and live objects afterwards
 	{
-		int width = 800, height = 600;
-		gGraphicsCore = Spectral::Graphics::GraphicsCore::GetGraphicsCoreInstance(swapChainPanel);
-		if (!init)
-		{
-			gScene.Initialize(gGraphicsCore);
-			init = true;
-			timer.Reset();
-
-			//gWindow->GetDimensions(width, height);
-			gSceneCamera.SetLens(0.25f * XM_PI, static_cast<float>(width) / height, 1.0f, 1000.0f);
-			gSceneCamera.LookAt(XMFLOAT3(0, 18, -60), XMFLOAT3(0, 18, -59), XMFLOAT3(0.0f, 1.0f, 0.0f));
-			gSceneCamera.UpdateViewMatrix();
-		}
+		ASSERT(init, L"SceneManager has not yet been initialized");
 
 		// Manually track FPS metrics for now
 		int numFrames = 0;

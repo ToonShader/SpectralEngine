@@ -843,7 +843,7 @@ void GraphicsCore::BuildDescriptorHeaps()
 
 	// Create the SRV heap for textures.
 	D3D12_DESCRIPTOR_HEAP_DESC srvHeapDesc = {};
-	srvHeapDesc.NumDescriptors = 3 + 3 + 1; // 3 textures + 3 normal maps (will be configurable soon) + cube map
+	srvHeapDesc.NumDescriptors = 3 + 3 + 1; // 3 textures + 3 normal maps (will be configurable soon (maybe)) + cube map
 	srvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 	srvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 	ASSERT_HR(md3dDevice->CreateDescriptorHeap(&srvHeapDesc, IID_PPV_ARGS(&mSrvDescriptorHeap)));
@@ -1348,7 +1348,7 @@ void GraphicsCore::SubmitSceneTextures(std::vector<Texture*>& texes, std::vector
 			handle.Offset(1, mCbvSrvUavDescriptorSize);
 
 		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING; // TODO: What?
 		srvDesc.Format = texResource->GetDesc().Format;
 		if (texes[i]->Type == Texture::Tex2D)
 		{

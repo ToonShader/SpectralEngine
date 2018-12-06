@@ -9,11 +9,17 @@
 
 using namespace SpectralEditor;
 
+
+#include <winrt/Windows.Foundation.h>
+#include <ppltasks.h>
+#include <experimental/filesystem>
 using namespace Platform;
 using namespace Windows::Foundation;
 using namespace Windows::Foundation::Collections;
 using namespace Windows::Graphics::Display;
 using namespace Windows::System::Threading;
+using namespace Windows::Storage::Search;
+using namespace Windows::Storage;
 using namespace Windows::UI::Core;
 using namespace Windows::UI::Input;
 using namespace Windows::UI::Xaml;
@@ -82,12 +88,11 @@ DirectXPage::DirectXPage():
 	// Run task on a dedicated high priority background thread.
 	m_inputLoopWorker = ThreadPool::RunAsync(workItemHandler, WorkItemPriority::High, WorkItemOptions::TimeSliced);
 
+	// Start my stuff - - - -
+	InitializePrimaryScene();
+
 	m_main = std::unique_ptr<SpectralEditorMain>(new SpectralEditorMain());
 	m_main->StartRenderLoop(swapChainPanel);
-
-
-	// Start my stuff - - - -
-	LoadObjects();
 }
 
 DirectXPage::~DirectXPage()
@@ -217,10 +222,268 @@ void DirectXPage::OnPointerReleased(Object^ sender, PointerEventArgs^ e)
 	e->Handled = true;
 }
 
-void DirectXPage::LoadObjects()
+void DirectXPage::InitializePrimaryScene()
 {
-	// TODO: Load all objects in directory
+	// We need to tell the scene what objects to load first
+	std::vector<std::string> fileNames;
+	auto directoryEntries = GetFolderContents(L"Models");
+	for (auto& entry : directoryEntries)
+	{
+		fileNames.push_back("Models/" + entry.path().filename().string());
+	}
+	gScene.SetObjectFiles(fileNames);
+	fileNames.clear();
+
+	// TODO: Need to separate basic geometry generation/loading from creating the vertex/index buffers
+	// Now we can initialize the scene
+	Initialize(swapChainPanel);
+
+	// Update the UI panel with the objects that can be placed in the scene
+	gScene.GetAvailableObjects(fileNames);
+	objectPickerGrid->Children->Clear();
+	for (auto& name : fileNames)
+	{
+		TextBlock^ tile = ref new TextBlock();
+		tile->Text = ref new String(std::wstring(name.begin(), name.end()).c_str());
+		tile->PointerPressed += ref new PointerEventHandler(this, &DirectXPage::ObjectPanel_PointerPressed);
+		objectPickerGrid->Children->Append(tile);
+	}
 }
+
+
+
+//#include "winrt/Windows.Storage.h"
+//#include "winrt/Windows.Storage.Pickers.h"
+//#include <Windows.h>
+//#include <wrl.h>
+//#include <filesystem>
+//using namespace Windows::Storage;
+//using namespace Windows::Storage::Pickers;
+//
+//#include <pplawait.h>
+//
+//using namespace Platform;
+//
+//#include <fstream>
+//#include <iostream>
+//#include <filesystem>
+
+std::vector<std::experimental::filesystem::directory_entry> DirectXPage::GetFolderContents(const std::wstring& folder)
+{
+	Windows::Storage::StorageFolder^ installedLocation = Windows::ApplicationModel::Package::Current->InstalledLocation;
+	std::wstring path = installedLocation->Path->Data();
+	path += L"/" + folder;
+
+	std::vector<std::experimental::filesystem::directory_entry> entries;
+	for (auto& entry : std::experimental::filesystem::directory_iterator(path))
+		entries.push_back(entry);
+
+	return entries;
+}
+
+//task<std::pair<std::vector<StorageFolder^>, std::vector<StorageFile^>>> GetModelFolderContents()
+//{
+//
+//
+//	// TODO: Add support for changing directories
+//	//auto picker = ref new FileOpenPicker();
+//	//picker->FileTypeFilter->Append(L".jpg");
+//	//picker->SuggestedStartLocation = PickerLocationId::PicturesLibrary;
+//
+//	//auto file = co_await picker->PickSingleFileAsync();
+//	//if (nullptr == file)
+//	//	return;
+//
+//	//auto stream = co_await file->OpenReadAsync();
+//
+//	//OutputDebugString(L"1. End of OpenReadAsync lambda.\r\n");
+//
+//	//Windows::Storage::StorageFolder^ installedLocation = Windows::ApplicationModel::Package::Current->InstalledLocation;
+//	//auto folders = co_await installedLocation->GetFoldersAsync();
+//	//for (auto folder : folders)
+//	//{
+//	//	
+//	//}
+//	//
+//	//auto files = co_await installedLocation->GetFilesAsync();
+//	//for (auto file : files)
+//	//{
+//
+//	//}
+//
+//	//create_task(KnownFolders::GetFolderForUserAsync(nullptr /* current user */, KnownFolderId::PicturesLibrary)).then([this, queryOptions](StorageFolder^ picturesFolder)
+//	//{
+//	//	auto query = picturesFolder->CreateFileQueryWithOptions(queryOptions);
+//	//	return query->GetFilesAsync();
+//	//}).then([=](IVectorView<StorageFile^>^ files)
+//	//{
+//	//	std::for_each(begin(files), end(files), [=](StorageFile^ file)
+//	//	{
+//	//		// Create UI elements for the output and fill in the contents when they are available.
+//	//		OutputPanel->Children->Append(CreateHeaderTextBlock(file->Name));
+//	//		TextBlock^ imagePropTextBlock = CreateLineItemTextBlock();
+//	//		OutputPanel->Children->Append(imagePropTextBlock);
+//	//		TextBlock^ copyrightTextBlock = CreateLineItemTextBlock();
+//	//		OutputPanel->Children->Append(copyrightTextBlock);
+//	//		TextBlock^ colorspaceTextBlock = CreateLineItemTextBlock();
+//	//		OutputPanel->Children->Append(colorspaceTextBlock);
+//
+//	//		// GetImagePropertiesAsync will return synchronously when prefetching has been able to
+//	//		// retrieve the properties in advance.
+//	//		create_task(file->Properties->GetImagePropertiesAsync()).then([=](ImageProperties^ properties)
+//	//		{
+//	//			imagePropTextBlock->Text = "Dimensions: " + properties->Width + "x" + properties->Height;
+//	//		});
+//
+//	//		// Similarly, extra properties are retrieved asynchronously but may
+//	//		// return immediately when prefetching has fulfilled its task.
+//	//		create_task(file->Properties->RetrievePropertiesAsync(propertyNames)).then([=](IMap<String^, Object^>^ extraProperties)
+//	//		{
+//	//			copyrightTextBlock->Text = "Copyright: " + GetPropertyDisplayValue(extraProperties->Lookup(CopyrightProperty));
+//	//			colorspaceTextBlock->Text = "Color space: " + GetPropertyDisplayValue(extraProperties->Lookup(ColorSpaceProperty));
+//	//		});
+//
+//	//		// Thumbnails can also be retrieved and used.
+//	//		/*
+//	//		create_task(file->GetThumbnailAsync(thumbnailMode, requestedSize, thumbnailOptions)).then([=](StorageItemThumbnail^ thumbnail)
+//	//		{
+//	//			// Use the thumbnail.
+//	//		});
+//	//		*/
+//	//	});
+//	//});
+//
+//}
+
+
+//using namespace Platform;
+//
+//task<std::vector<StorageFile^>> GetObjectFileList()
+//{
+//	Windows::Storage::StorageFolder^ installedLocation = Windows::ApplicationModel::Package::Current->InstalledLocation;
+//	auto file = co_await installedLocation->GetFolderAsync("dfgd");//.PickSingleFileAsync();
+//	if (file)
+//	{
+//		auto tempFolder = ApplicationData::Current->TemporaryFolder;
+//		auto tempFile = co_await file.CopyAsync(tempFolder, file.Name(), NameCollisionOption::GenerateUniqueName);
+//		if (tempFile)
+//		{
+//			HRESULT hr = CreateWICTextureFromFile(..., tempFile.Path().c_str(), ...);
+//			DeleteFile(tempFile.Path().c_str());
+//			DX::ThrowIfFailed(hr);
+//		}
+//	}
+//
+//
+//	return concurrency::create_task([]
+//	{
+//		StorageFolder^ appInstalledFolder = Windows::ApplicationModel::Package::Current->InstalledLocation;
+//		auto a = co_await appInstalledFolder->GetFolderAsync("Assets");
+//
+//		Uri rssFeedUri{ L"https://blogs.windows.com/feed" };
+//		SyndicationClient syndicationClient;
+//		SyndicationFeed syndicationFeed = syndicationClient.RetrieveFeedAsync(rssFeedUri).get();
+//		return std::wstring{ syndicationFeed.Items().GetAt(0).Title().Text() };
+//	});
+//
+//
+//
+//
+//	StorageFolder^ assets;
+//	auto files = co_await  assets.GetFilesAsync();
+//
+//	StorageFolderQueryResult queryResult = appInstalledFolder.CreateFolderQuery(CommonFolderQuery::GroupByMonth);
+//
+//	IReadOnlyList < StorageFolderfolderList =
+//		await queryResult.GetFoldersAsync();
+//
+//
+//	foreach (StorageFolder folder in folderList)
+//	{
+//		IReadOnlyList < StorageFilefileList = await folder.GetFilesAsync();
+//
+//		// Print the month and number of files in this group.
+//		outputText.AppendLine(folder.Name + " (" + fileList.Count + ")");
+//
+//		foreach(StorageFile file in fileList)
+//		{
+//			// Print the name of the file.
+//			outputText.AppendLine("   " + file.Name);
+//		}
+//	}
+//
+//
+//	// Reset output.
+//	OutputPanel->Children->Clear();
+//
+//	// Set up file type filter.
+//	auto fileTypeFilter = ref new Vector<String^>();
+//	fileTypeFilter->Append(".jpg");
+//	fileTypeFilter->Append(".png");
+//	fileTypeFilter->Append(".bmp");
+//	fileTypeFilter->Append(".gif");
+//
+//	// Create query options.
+//	auto queryOptions = ref new QueryOptions(CommonFileQuery::OrderByName, fileTypeFilter);
+//
+//	// Set up property prefetch - use the PropertyPrefetchOptions for top-level properties
+//	// and a vector for additional properties.
+//	//auto propertyNames = ref new Vector<String^>();
+//	//propertyNames->Append(CopyrightProperty);
+//	//propertyNames->Append(ColorSpaceProperty);
+//	//queryOptions->SetPropertyPrefetch(PropertyPrefetchOptions::ImageProperties, propertyNames);
+//
+//	// Set up thumbnail prefetch if needed, e.g. when creating a picture gallery view.
+//	/*
+//	const UINT requestedSize = 190;
+//	const ThumbnailMode thumbnailMode = ThumbnailMode::PicturesView;
+//	const ThumbnailOptions thumbnailOptions = ThumbnailOptions::UseCurrentScale;
+//	queryOptions->SetThumbnailPrefetch(thumbnailMode, requestedSize, thumbnailOptions);
+//	*/
+//
+//	// Set up the query and retrieve files.
+//	create_task(KnownFolders::GetFolderForUserAsync(nullptr /* current user */, KnownFolderId::PicturesLibrary)).then([this, queryOptions](StorageFolder^ picturesFolder)
+//	{
+//		auto query = picturesFolder->CreateFileQueryWithOptions(queryOptions);
+//		return query->GetFilesAsync();
+//	}).then([=](IVectorView<StorageFile^>^ files)
+//	{
+//		std::for_each(begin(files), end(files), [=](StorageFile^ file)
+//		{
+//			// Create UI elements for the output and fill in the contents when they are available.
+//			OutputPanel->Children->Append(CreateHeaderTextBlock(file->Name));
+//			TextBlock^ imagePropTextBlock = CreateLineItemTextBlock();
+//			OutputPanel->Children->Append(imagePropTextBlock);
+//			TextBlock^ copyrightTextBlock = CreateLineItemTextBlock();
+//			OutputPanel->Children->Append(copyrightTextBlock);
+//			TextBlock^ colorspaceTextBlock = CreateLineItemTextBlock();
+//			OutputPanel->Children->Append(colorspaceTextBlock);
+//
+//			// GetImagePropertiesAsync will return synchronously when prefetching has been able to
+//			// retrieve the properties in advance.
+//			create_task(file->Properties->GetImagePropertiesAsync()).then([=](ImageProperties^ properties)
+//			{
+//				imagePropTextBlock->Text = "Dimensions: " + properties->Width + "x" + properties->Height;
+//			});
+//
+//			// Similarly, extra properties are retrieved asynchronously but may
+//			// return immediately when prefetching has fulfilled its task.
+//			create_task(file->Properties->RetrievePropertiesAsync(propertyNames)).then([=](IMap<String^, Object^>^ extraProperties)
+//			{
+//				copyrightTextBlock->Text = "Copyright: " + GetPropertyDisplayValue(extraProperties->Lookup(CopyrightProperty));
+//				colorspaceTextBlock->Text = "Color space: " + GetPropertyDisplayValue(extraProperties->Lookup(ColorSpaceProperty));
+//			});
+//
+//			// Thumbnails can also be retrieved and used.
+//			/*
+//			create_task(file->GetThumbnailAsync(thumbnailMode, requestedSize, thumbnailOptions)).then([=](StorageItemThumbnail^ thumbnail)
+//			{
+//				// Use the thumbnail.
+//			});
+//			*/
+//		});
+//	});
+//}
 
 void DirectXPage::OnCompositionScaleChanged(SwapChainPanel^ sender, Object^ args)
 {
@@ -236,10 +499,13 @@ void DirectXPage::OnSwapChainPanelSizeChanged(Object^ sender, SizeChangedEventAr
 	m_main->CreateWindowSizeDependentResources();
 }
 
-void SpectralEditor::DirectXPage::ObjectPanel_PointerPressed(Platform::Object^ sender, Windows::UI::Xaml::Input::PointerRoutedEventArgs^ e)
+void DirectXPage::ObjectPanel_PointerPressed(Platform::Object^ sender, PointerRoutedEventArgs^ e)
 {
+	TextBlock^ text = static_cast<TextBlock^>(sender);
+
 	gUpdateLock.lock();
-	gScene.AddObject();
+	std::wstring_view converter(text->Text->Data());
+	gScene.AddObject(std::string(converter.begin(), converter.end()));
 	gUpdateLock.unlock();
 	e->Handled = true;
 }

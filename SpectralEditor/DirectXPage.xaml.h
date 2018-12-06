@@ -7,6 +7,8 @@
 
 #include "DirectXPage.g.h"
 
+#include <experimental/filesystem>
+
 //#include "Common\DeviceResources.h"
 #include "SpectralEditorMain.h"
 
@@ -57,7 +59,9 @@ namespace SpectralEditor
 
 		int ActivePointerButton = 0;
 
-		void LoadObjects();
+		void InitializePrimaryScene();
+		std::vector<std::experimental::filesystem::directory_entry> GetFolderContents(const std::wstring& folder);
+		//Concurrency::task<std::vector<StorageFile^>> DirectXPage::GetObjectFileList();
 		void ObjectPanel_PointerPressed(Platform::Object^ sender, Windows::UI::Xaml::Input::PointerRoutedEventArgs^ e);
 	};
 }

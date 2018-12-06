@@ -31,12 +31,19 @@ SceneManager::~SceneManager()
 {
 }
 
+void SceneManager::SetObjectFiles(const std::vector<std::string>& objFiles)
+{
+	mObjectFiles = objFiles;
+}
+
 void SceneManager::Initialize(Spectral::Graphics::GraphicsCore* graphicsCore)
 {
 	mGraphicsCore = graphicsCore;
 	BuildShapeGeometry();
 	BuildMaterials();
 	BuildRenderItems();
+
+	mReady = true;
 }
 
 void SceneManager::UpdateScene(float dt, Camera camera)
@@ -50,7 +57,7 @@ void SceneManager::UpdateScene(float dt, Camera camera)
 	if (A > 10000)
 	{
 		A = 0;
-		AddObject();
+		AddObject("arrows");
 	}
 }
 
@@ -61,15 +68,11 @@ void SceneManager::DrawScene()
 
 void SceneManager::BuildShapeGeometry()
 {
-	// Get all files to load
-	std::vector<std::string> filenames;
-	filenames.push_back("Models/arrows.obj"); // Soon we will search the directory for all available models
-
 	ObjectConditioner loader;
 	std::vector<SubMesh> meshes;
 	std::vector<Vertex> vertices;
 	std::vector<std::uint16_t> indices;
-	loader.LoadObjectsFromFiles(filenames, vertices, indices, meshes);
+	loader.LoadObjectsFromFiles(mObjectFiles, vertices, indices, meshes);
 	
 	const UINT vbByteSize = (UINT)vertices.size() * sizeof(Vertex);
 	const UINT ibByteSize = (UINT)indices.size() * sizeof(std::uint16_t);
@@ -104,6 +107,22 @@ void SceneManager::BuildShapeGeometry()
 
 void SceneManager::BuildRenderItems()
 {
+	//for (auto& geo : mGeometries["shapeGep"]->DrawArgs)
+	//{
+	//	auto packet = std::make_unique<RenderPacket>();
+	//	packet->Mat = mMaterials["default"].get();
+	//	// TODO: Add support for multiple geometry buffers
+	//	packet->Geo = mGeometries["shapeGeo"].get();
+	//	packet->Geo->DrawArgs[geo.first].IndexCount;
+	//	// TODO: Consolidate draw args into a SubMesh within RenderPacket
+	//	packet->IndexCount = packet->Geo->DrawArgs[geo.first].IndexCount;
+	//	packet->StartIndexLocation = packet->Geo->DrawArgs[geo.first].StartIndexLocation;
+	//	packet->BaseVertexLocation = packet->Geo->DrawArgs[geo.first].BaseVertexLocation;
+	//	packet->Bounds = packet->Geo->DrawArgs[geo.first].Bounds;
+	//	mAvailableObjects
+	//}
+
+
 	auto boxRitem = std::make_unique<RenderPacket>();
 	XMStoreFloat4x4(&boxRitem->World, XMMatrixScaling(2.0f, 2.0f, 2.0f)*XMMatrixTranslation(0.0f, 1.0f, 0.0f));
 	//XMStoreFloat4x4(&boxRitem->TexTransform, XMMatrixScaling(0.3f, 0.3f, 0.3f));
@@ -408,26 +427,26 @@ void SceneManager::BuildMaterials()
 	mMaterials["default"] = std::move(defaultMat);
 }
 
-void SceneManager::AddObject()
+void SceneManager::AddObject(const std::string& object, const std::string& material, NamedPSO PSO)
 {
-	auto extents = mGeometries["shapeGeo"]->DrawArgs["arrows"].Bounds.Extents;
+	// TODO: Add support for multiple geometry buffers
+	auto extents = mGeometries["shapeGeo"]->DrawArgs[object].Bounds.Extents;
 	XMVECTOR factor = XMVectorReplicate(2.5 * max(max(extents.x, extents.y), extents.z));
-	XMVECTOR pos = mSceneCamera.GetPosition();
+	XMVECTOR cameraPos = mSceneCamera.GetPosition();
 	XMVECTOR look = mSceneCamera.GetLook();
-	XMFLOAT3 otherPos;
-	XMStoreFloat3(&otherPos, XMVectorMultiplyAdd(factor, look, pos));
+	XMFLOAT3 objPos;
+	XMStoreFloat3(&objPos, XMVectorMultiplyAdd(factor, look, cameraPos));
 
 	auto axis_set = std::make_unique<RenderPacket>();
-	XMStoreFloat4x4(&axis_set->World, XMMatrixTranslation(otherPos.x, otherPos.y, otherPos.z));
+	XMStoreFloat4x4(&axis_set->World, XMMatrixTranslation(objPos.x, objPos.y, objPos.z));
 	XMStoreFloat4x4(&axis_set->TexTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
-	axis_set->Mat = mMaterials["default"].get();
+	axis_set->Mat = mMaterials[material].get();
 	axis_set->Geo = mGeometries["shapeGeo"].get();
-	axis_set->PSO = NamedPSO::Default;
-	axis_set->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
-	axis_set->IndexCount = axis_set->Geo->DrawArgs["arrows"].IndexCount;
-	axis_set->StartIndexLocation = axis_set->Geo->DrawArgs["arrows"].StartIndexLocation;
-	axis_set->BaseVertexLocation = axis_set->Geo->DrawArgs["arrows"].BaseVertexLocation;
-	axis_set->Bounds = axis_set->Geo->DrawArgs["arrows"].Bounds;
+	axis_set->PSO = PSO;
+	axis_set->IndexCount = axis_set->Geo->DrawArgs[object].IndexCount;
+	axis_set->StartIndexLocation = axis_set->Geo->DrawArgs[object].StartIndexLocation;
+	axis_set->BaseVertexLocation = axis_set->Geo->DrawArgs[object].BaseVertexLocation;
+	axis_set->Bounds = axis_set->Geo->DrawArgs[object].Bounds;
 
 	std::vector<RenderPacket*> packets;
 	packets.push_back(axis_set.get());
@@ -436,4 +455,25 @@ void SceneManager::AddObject()
 	mAllRitems.push_back(std::move(axis_set));
 
 	mGraphicsCore->SubmitRenderPackets(packets);
+}
+
+bool SceneManager::IsReady()
+{
+	return mReady;
+}
+
+void SceneManager::GetAvailableObjects(std::vector<std::string>& objects)
+{
+	for (auto& keyValue : mGeometries["shapeGeo"]->DrawArgs)
+	{
+		objects.push_back(keyValue.first);
+	}
+}
+
+void SceneManager::GetAvailableMaterials(std::vector<std::string>& materials)
+{
+	for (auto& keyValue : mMaterials)
+	{
+		materials.push_back(keyValue.first);
+	}
 }
