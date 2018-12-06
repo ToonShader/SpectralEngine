@@ -16,26 +16,6 @@
 
 //using namespace SpectralEditor;
 
-#if !WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP)
-using namespace Platform;
-using namespace Windows::Foundation;
-using namespace Windows::Foundation::Collections;
-using namespace Windows::Graphics::Display;
-using namespace Windows::System::Threading;
-using namespace Windows::UI::Core;
-using namespace Windows::UI::Input;
-using namespace Windows::UI::Xaml;
-using namespace Windows::UI::Xaml::Controls;
-using namespace Windows::UI::Xaml::Controls::Primitives;
-using namespace Windows::UI::Xaml::Data;
-using namespace Windows::UI::Xaml::Input;
-using namespace Windows::UI::Xaml::Media;
-using namespace Windows::UI::Xaml::Navigation;
-//using namespace concurrency;
-
-#include <windows.ui.xaml.media.dxinterop.h>
-#endif
-
 // Simple toggle for benchmarking to disable debug layers
 //#define RELEASE
 
@@ -74,7 +54,6 @@ GraphicsCore::~GraphicsCore()
 		delete mCurrFrameResource;
 }
 
-#if WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP)
 GraphicsCore* GraphicsCore::GetGraphicsCoreInstance(HWND renderWindow)
 {
 	if (renderWindow == nullptr || mGraphicsCore != nullptr)
@@ -85,18 +64,6 @@ GraphicsCore* GraphicsCore::GetGraphicsCoreInstance(HWND renderWindow)
 	mGraphicsCore->Initialize();
 	return mGraphicsCore;
 }
-#else
-GraphicsCore* GraphicsCore::GetGraphicsCoreInstance(Windows::UI::Xaml::Controls::SwapChainPanel^ panel)
-{
-	if (mGraphicsCore != nullptr)
-		return mGraphicsCore;
-
-	mGraphicsCore = new GraphicsCore();
-	mGraphicsCore->mSwapChainPanel = panel;
-	mGraphicsCore->Initialize();
-	return mGraphicsCore;
-}
-#endif
 
 bool GraphicsCore::DestroyGraphicsCoreInstance()
 {
@@ -517,7 +484,7 @@ void GraphicsCore::CreateSwapChain()
 	scDesc.Width = mClientWidth;
 	scDesc.Height = mClientHeight;
 	scDesc.Format = mBackBufferFormat;
-	scDesc.Scaling = DXGI_SCALING_STRETCH;
+	scDesc.Scaling = DXGI_SCALING_NONE; // STRETCH required for UWP integration
 	scDesc.SampleDesc.Count = 1; //m4xMsaaState ? 4 : 1;
 	scDesc.SampleDesc.Quality = 0; //m4xMsaaState ? (m4xMsaaQuality - 1) : 0;
 	scDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
@@ -527,29 +494,8 @@ void GraphicsCore::CreateSwapChain()
 
 	// Note: Swap chain flushes queue
 	// Note: This is where initial fullscreen will need to be established
-#if WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP)
 	ASSERT_HR(mdxgiFactory->CreateSwapChainForHwnd(mCommandQueue.Get(), mhRenderWindow, &scDesc,
 		nullptr, nullptr, mSwapChain.GetAddressOf()));
-#else
-	//auto blah = reinterpret_cast<IUnknown*>(Window::Current->CoreWindow);
-	ASSERT_HR(mdxgiFactory->CreateSwapChainForComposition(mCommandQueue.Get(), &scDesc, nullptr, &mSwapChain));
-	// Associate swap chain with SwapChainPanel
-	// UI changes will need to be dispatched back to the UI thread
-	mSwapChainPanel->Dispatcher->RunAsync(CoreDispatcherPriority::High, ref new DispatchedHandler([=]()
-	{
-		// Get backing native interface for SwapChainPanel
-		Microsoft::WRL::ComPtr<ISwapChainPanelNative> panelNative;
-		ASSERT_HR(reinterpret_cast<IUnknown*>(mSwapChainPanel)->QueryInterface(IID_PPV_ARGS(&panelNative)));
-
-		ASSERT_HR(panelNative->SetSwapChain(mSwapChain.Get()));
-	}, CallbackContext::Any));
-
-	// Ensure that DXGI does not queue more than one frame at a time. This both reduces latency and
-	// ensures that the application will only render after each VSync, minimizing power consumption.
-	//Microsoft::WRL::ComPtr<IDXGIDevice> dxgiDevice;
-	//ASSERT_HR(md3dDevice.As(&dxgiDevice));
-	//ASSERT_HR(dxgiDevice->SetMaximumFrameLatency(1));
-#endif
 }
 
 void GraphicsCore::FlushCommandQueue()
