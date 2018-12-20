@@ -31,11 +31,6 @@ SceneManager::~SceneManager()
 {
 }
 
-void SceneManager::SetObjectFiles(const std::vector<std::string>& objFiles)
-{
-	mObjectFiles = objFiles;
-}
-
 void SceneManager::Initialize(Spectral::Graphics::GraphicsCore* graphicsCore)
 {
 	mGraphicsCore = graphicsCore;
@@ -43,21 +38,28 @@ void SceneManager::Initialize(Spectral::Graphics::GraphicsCore* graphicsCore)
 	BuildMaterials();
 	BuildRenderItems();
 
-	mReady = true;
+	//int width, height;
+	//gWindow->GetDimensions(width, height);
+	//gSceneCamera.SetLens(0.25f * XM_PI, static_cast<float>(width) / height, 1.0f, 1000.0f);
+	mSceneCamera.LookAt(XMFLOAT3(0, 18, -60), XMFLOAT3(0, 18, -59), XMFLOAT3(0.0f, 1.0f, 0.0f));
+	mSceneCamera.UpdateViewMatrix();
 }
 
-void SceneManager::UpdateScene(float dt, Camera camera)
+void SceneManager::UpdateScene(float dt)
 {
-	static float A = 0;
-	A += dt;
-	mSceneCamera = camera;
-	if (ActiveObject)
-		XMStoreFloat4x4(&(ActiveObject->World), XMLoadFloat4x4(&(ActiveObject->World))*XMMatrixTranslation(0.0f, dt/500, 0.0f));
+	mSceneCamera.UpdateViewMatrix();
 
-	if (A > 10000)
+	if (mActiveObject)
 	{
-		A = 0;
-		AddObject("arrows");
+		// Update the editing axis to be at the origin of the active object.
+		for (int i = 0; i < static_cast<int>(SELECTED_AXIS::SIZE); ++i)
+		{
+			// We are doing a literal translation, so there is no need to do a full matrix
+			// multiplication. Instead, just update the coordinate translation.
+			mEditingAxis[i]->World._41 = mActiveObject->World._41;
+			mEditingAxis[i]->World._42 = mActiveObject->World._42;
+			mEditingAxis[i]->World._43 = mActiveObject->World._43;
+		}
 	}
 }
 
@@ -291,6 +293,34 @@ void SceneManager::BuildRenderItems()
 	//for (auto& e : mAllRitems)
 	//	packets.push_back(e.get());
 
+	// A coordinate axis for editing
+	auto x_axis = std::make_unique<RenderPacket>();
+	x_axis->Mat = mMaterials["default"].get();
+	x_axis->Geo = mGeometries["shapeGeo"].get();
+	x_axis->PSO = NamedPSO::Default;
+	x_axis->IndexCount = x_axis->Geo->DrawArgs["axis_arrow"].IndexCount;
+	x_axis->StartIndexLocation = x_axis->Geo->DrawArgs["axis_arrow"].StartIndexLocation;
+	x_axis->BaseVertexLocation = x_axis->Geo->DrawArgs["axis_arrow"].BaseVertexLocation;
+	x_axis->Bounds = x_axis->Geo->DrawArgs["axis_arrow"].Bounds;
+
+	auto y_axis = std::make_unique<RenderPacket>();
+	auto z_axis = std::make_unique<RenderPacket>();
+	*y_axis = *z_axis = *x_axis;
+	XMStoreFloat4x4(&y_axis->World, XMMatrixRotationZ(XM_PI / 2.0f));
+	XMStoreFloat4x4(&z_axis->World, XMMatrixRotationY(XM_PI / -2.0f));
+
+	mEditingAxis[0] = x_axis.get();
+	mEditingAxis[1] = y_axis.get();
+	mEditingAxis[2] = z_axis.get();
+	packets.push_back(x_axis.get());
+	packets.push_back(y_axis.get());
+	packets.push_back(z_axis.get());
+	mAllRitems.push_back(std::move(x_axis));
+	mAllRitems.push_back(std::move(y_axis));
+	mAllRitems.push_back(std::move(z_axis));
+
+	mGraphicsCore->SubmitRenderPackets(packets);
+
 	// Add the sky sphere last
 	auto skyRitem = std::make_unique<RenderPacket>();
 	XMStoreFloat4x4(&skyRitem->World, XMMatrixScaling(5000.0f, 5000.0f, 5000.0f));
@@ -307,7 +337,7 @@ void SceneManager::BuildRenderItems()
 
 	mGraphicsCore->SubmitRenderPackets(packets);
 
-	ActiveObject = mAllRitems.begin()->get();
+	mActiveObject = mAllRitems.begin()->get();
 }
 
 void SceneManager::BuildMaterials()
@@ -416,7 +446,7 @@ void SceneManager::BuildMaterials()
 	auto defaultMat = std::make_unique<Material>();
 	defaultMat->Name = "default";
 	defaultMat->DiffuseSrvHeapIndex = indicies[6];
-	defaultMat->DiffuseAlbedo = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
+	defaultMat->DiffuseAlbedo = XMFLOAT4(1.0f, 0.0f, 1.0f, 1.0f);
 	defaultMat->FresnelR0 = XMFLOAT3(0.1f, 0.1f, 0.1f);
 	defaultMat->Roughness = 1.0f;
 
@@ -451,29 +481,199 @@ void SceneManager::AddObject(const std::string& object, const std::string& mater
 	std::vector<RenderPacket*> packets;
 	packets.push_back(axis_set.get());
 
-	ActiveObject = axis_set.get();
+	mActiveObject = axis_set.get();
 	mAllRitems.push_back(std::move(axis_set));
 
 	mGraphicsCore->SubmitRenderPackets(packets);
 }
 
-bool SceneManager::IsReady()
+void SceneManager::AddObject(const RenderPacket* const packet)
 {
-	return mReady;
+	auto newPacket = std::make_unique<RenderPacket>();
+	*newPacket = *packet;
+	
+	std::vector<RenderPacket*> packets;
+	packets.push_back(newPacket.get());
+
+	mActiveObject = newPacket.get();
+	mAllRitems.push_back(std::move(newPacket));
+
+	mGraphicsCore->SubmitRenderPackets(packets);
 }
 
-void SceneManager::GetAvailableObjects(std::vector<std::string>& objects)
+void SceneManager::Resize(int clientWidth, int clientHeight)
 {
-	for (auto& keyValue : mGeometries["shapeGeo"]->DrawArgs)
+	mClientWidth = clientWidth;
+	mClientHeight = clientHeight;
+	mSceneCamera.SetLens(0.25f * XM_PI, static_cast<float>(clientWidth) / clientHeight, 1.0f, 1000.0f);
+}
+
+void SceneManager::OnMouseDown(WPARAM btnState, int sx, int sy)
+{
+	// Set last position for camera movements.
+	mLastMousePos.x = sx;
+	mLastMousePos.y = sy;
+
+	mLastMouseDownPos.x = sx;
+	mLastMouseDownPos.y = sy;
+
+	//SetCapture(gWindow->getHandle());
+
+	mSceneCamera.UpdateViewMatrix();
+	const XMFLOAT4X4& proj = mSceneCamera.GetProj4x4f();
+	float vx = (+2.0f*sx / mClientWidth - 1.0f) / proj(0, 0);
+	float vy = (-2.0f*sy / mClientHeight + 1.0f) / proj(1, 1);
+
+	//// For screen space picking
+	//vx = (+2.0f*sx / mClientWidth - 1.0f);
+	//vy = (-2.0f*sy / mClientHeight + 1.0f);
+	//rayOrigin = XMVectorSet(0.0f, 0.0f, -1.0f, 1.0f);
+	//rayDir = XMVectorSet(vx, vy, 1.0f, 0.0f);
+	//XMMATRIX invView = XMMatrixInverse(&XMMatrixDeterminant(view), view);
+
+	mSelectedAxis = SELECTED_AXIS::NONE;
+	XMVECTOR rayOrigin = XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f);
+	XMVECTOR rayDir = XMVector3Normalize(XMVectorSet(vx, vy, 1.0f, 0.0f));
+	float minDistance = D3D12_FLOAT32_MAX;
+	for (int i = 0; i < static_cast<int>(SELECTED_AXIS::SIZE); ++i)
 	{
-		objects.push_back(keyValue.first);
+		// TODO: Switch to picking in world space?
+		// Perform containment check in view space
+		XMMATRIX world = XMLoadFloat4x4(&mEditingAxis[i]->World);
+		XMMATRIX worldView = XMMatrixMultiply(world, mSceneCamera.GetView());
+
+		DirectX::BoundingBox viewBox;
+		mEditingAxis[i]->Bounds.Transform(viewBox, worldView);
+		float distance;
+		if (viewBox.Intersects(rayOrigin, rayDir, distance) && distance < minDistance)
+		{
+			mSelectedAxis = static_cast<SELECTED_AXIS>(i);
+			minDistance = distance;
+		}
 	}
 }
 
-void SceneManager::GetAvailableMaterials(std::vector<std::string>& materials)
+void SceneManager::OnMouseUp(WPARAM btnState, int sx, int sy)
 {
-	for (auto& keyValue : mMaterials)
+	ReleaseCapture();
+
+	// They tried to click an object, find it and switch to it.
+	if (mLastMouseDownPos.x - sx == 0 && mLastMouseDownPos.y - sy == 0)
 	{
-		materials.push_back(keyValue.first);
+		// Technically this is mostly duplicate code, for now, but will
+		// soon be different to increase picking precision.
+		mSceneCamera.UpdateViewMatrix();
+		const XMFLOAT4X4& proj = mSceneCamera.GetProj4x4f();
+		float vx = (+2.0f*sx / mClientWidth - 1.0f) / proj(0, 0);
+		float vy = (-2.0f*sy / mClientHeight + 1.0f) / proj(1, 1);
+
+		//// For screen space picking
+		//vx = (+2.0f*sx / mClientWidth - 1.0f);
+		//vy = (-2.0f*sy / mClientHeight + 1.0f);
+		//rayOrigin = XMVectorSet(0.0f, 0.0f, -1.0f, 1.0f);
+		//rayDir = XMVectorSet(vx, vy, 1.0f, 0.0f);
+
+		RenderPacket* pickedObject = nullptr;
+		XMVECTOR rayOrigin = XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f);
+		XMVECTOR rayDir = XMVector3Normalize(XMVectorSet(vx, vy, 1.0f, 0.0f));
+		float minDistance = D3D12_FLOAT32_MAX;
+		for (int i = 0; i < mAllRitems.size(); ++i)
+		{
+			// TODO: Switch to picking in world space?
+			// Perform containment check in view space
+			XMMATRIX world = XMLoadFloat4x4(&mAllRitems[i]->World);
+			XMMATRIX worldView = XMMatrixMultiply(world, mSceneCamera.GetView());
+
+			DirectX::BoundingBox viewBox;
+			mAllRitems[i]->Bounds.Transform(viewBox, worldView);
+			float distance;
+			bool isAxis = false;
+			for (int j = 0; j < static_cast<int>(SELECTED_AXIS::SIZE); ++j)
+				if (mAllRitems[i].get() == mEditingAxis[j])
+					isAxis = true;
+			if (isAxis)
+				continue;
+
+			// Ray length can be negative, so must use ABS
+			if (viewBox.Intersects(rayOrigin, rayDir, distance) && abs(distance) < minDistance)
+			{
+				pickedObject = mAllRitems[i].get();
+				minDistance = abs(distance);
+			}
+		}
+
+		mActiveObject = pickedObject;
+	}
+}
+
+void SceneManager::OnMouseMove(WPARAM btnState, int sx, int sy)
+{
+	if ((btnState & MK_LBUTTON) != 0 && mSelectedAxis != SELECTED_AXIS::NONE)
+	{
+		if (mActiveObject)
+		{
+			float dt = ((sx - mLastMousePos.x) + (sy - mLastMousePos.y)) / 100.0f;
+			switch (mSelectedAxis)
+			{
+			case SELECTED_AXIS::X:
+				XMStoreFloat4x4(&(mActiveObject->World), XMLoadFloat4x4(&(mActiveObject->World))*XMMatrixTranslation(dt, 0.0f, 0.0f));
+				break;
+			case SELECTED_AXIS::Y:
+				// Negative dt due to screen coordinates having origin in the top left
+				XMStoreFloat4x4(&(mActiveObject->World), XMLoadFloat4x4(&(mActiveObject->World))*XMMatrixTranslation(0.0f, -dt, 0.0f));
+				break;
+			case SELECTED_AXIS::Z:
+				XMStoreFloat4x4(&(mActiveObject->World), XMLoadFloat4x4(&(mActiveObject->World))*XMMatrixTranslation(0.0f, 0.0f, dt));
+				break;
+			}
+		}
+			
+	}
+	else if ((btnState & MK_LBUTTON) != 0)
+	{
+		float dx = (sx - mLastMousePos.x) / 600.0f;
+		float dy = (sy - mLastMousePos.y) / 800.0f;
+
+		// Rotate by the opposite of the desired angle to
+		// emulate the effect of dragging the scene around.
+		mSceneCamera.RotateY(-dx);
+		mSceneCamera.RotateX(-dy);
+
+		mRotateX += -dy;
+	}
+	else if ((btnState & MK_RBUTTON) != 0)
+	{
+		float dx = 0.05f*static_cast<float>(sx - mLastMousePos.x);
+		float dy = 0.05f*static_cast<float>(sy - mLastMousePos.y);
+
+		XMFLOAT3 pos = mSceneCamera.GetPosition3f();
+		pos.y += dy;
+		mSceneCamera.SetPosition(pos);
+		// mSceneCamera.Strafe(-dx); // Inverted for dragging effect
+	}
+	else if ((btnState & MK_MBUTTON) != 0)
+	{
+		float dx = 0.05f*static_cast<float>(sx - mLastMousePos.x);
+		float dy = 0.05f*static_cast<float>(sy - mLastMousePos.y);
+
+		// Move the camera in such a fashion that the World Y-axis is the up vector for the camera
+		mSceneCamera.RotateX(-mRotateX);
+		mSceneCamera.Walk(dy);
+		mSceneCamera.Strafe(-dx); // Inverted for dragging effect
+		mSceneCamera.RotateX(mRotateX);
+	}
+
+	mLastMousePos.x = sx;
+	mLastMousePos.y = sy;
+}
+
+void SceneManager::OnKeyDown(WPARAM keyState, LPARAM lParam)
+{
+	// Duplicate the active object on ctrl + v
+	if (keyState == 'V' &&
+		(GetKeyState(VK_CONTROL) & 0x8000) &&
+		(lParam & (1 << 30)) == 0) // Only on the first message for this key
+	{
+		AddObject(mActiveObject);
 	}
 }

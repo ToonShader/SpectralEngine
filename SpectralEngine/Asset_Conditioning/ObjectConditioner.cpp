@@ -78,13 +78,14 @@ void ObjectConditioner::LoadObjectsFromFiles(const std::vector<std::string>& fil
 				int end = filenames[i - 1].find_last_of('.');
 				combinedMesh.Name = filenames[i - 1].substr(start + 1, end - start - 1);
 			}
-			else
+			else if (i != 0)
 			{
 				combinedMesh.IndexCount += off.IndexCount;
 				DirectX::BoundingBox::CreateMerged(combinedMesh.Bounds, combinedMesh.Bounds, off.Bounds);
 			}
 		}
 
+		// Don't combine primitive geometry, which is grouped at index 0.
 		if (meshes[i].size() > 1 && i != 0)
 			subMeshes.push_back(combinedMesh);
 	}
@@ -134,11 +135,13 @@ void ObjectConditioner::LoadPrimitiveGeometry(std::vector<GeometryGenerator::Mes
 	out.push_back(geoGen.CreateGrid(30.0f, 30.0f, 40, 40));
 	out.push_back(geoGen.CreateSphere(0.5f, 20, 20));
 	out.push_back(geoGen.CreateCylinder(0.5f, 0.3f, 3.0f, 20, 20));
+	out.push_back(geoGen.CreateAxisArrow());
 
-	out[0].Name = "box";
-	out[1].Name = "grid";
-	out[2].Name = "sphere";
-	out[3].Name = "cylinder";
+	out[baseMesh + 0].Name = "box";
+	out[baseMesh + 1].Name = "grid";
+	out[baseMesh + 2].Name = "sphere";
+	out[baseMesh + 3].Name = "cylinder";
+	out[baseMesh + 4].Name = "axis_arrow";
 }
 
 bool ObjectConditioner::LoadObjectFromFile(const std::string& filename, std::vector<GeometryGenerator::MeshData>& meshes) const

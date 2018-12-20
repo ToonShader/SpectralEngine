@@ -3,24 +3,29 @@
 #include "Graphics/GraphicsCore.h"
 #include "Common/Camera.h"
 
+// For now, this is mostly a driver to demonstrate engine functionality.
 class SceneManager
 {
 public:
 	SceneManager();
 	~SceneManager();
 
-	void SetObjectFiles(const std::vector<std::string>& objFiles);
 	void Initialize(Spectral::Graphics::GraphicsCore* graphicsCore);
-	void UpdateScene(float dt, Camera camera);
+	void UpdateScene(float dt);
 	void DrawScene();
-	void AddObject(const std::string& object, const std::string& material = "default", NamedPSO PSO = NamedPSO::Default);
-	bool IsReady();
-	void GetAvailableObjects(std::vector<std::string>& objects);
-	//void GetAvailableTextures(std::vector<std::string>& objects);
-	void GetAvailableMaterials(std::vector<std::string>& objects);
+
+	void Resize(int width, int height);
+
+	void OnMouseDown(WPARAM btnState, int sx, int sy);
+	void OnMouseUp(WPARAM btnState, int sx, int sy);
+	void OnMouseMove(WPARAM btnState, int sx, int sy);
+	void OnKeyDown(WPARAM keyState, LPARAM lParam);
 
 private:
-	//void CalculateFrameStats(Timer& timer, HWND hWnd);
+	void AddObject(const std::string& object, const std::string& material = "default", NamedPSO PSO = NamedPSO::Default);
+	void AddObject(const RenderPacket* packet);
+
+	// void CalculateFrameStats(Timer& timer, HWND hWnd);
 	void BuildShapeGeometry();
 	void BuildRenderItems();
 	void BuildMaterials();
@@ -34,11 +39,17 @@ private:
 	std::vector<std::unique_ptr<RenderPacket>> mAllRitems;
 
 	Camera mSceneCamera;
+	POINT mLastMousePos;
+	POINT mLastMouseDownPos;
+	float mRotateX;
+	// Temporary until I drag the window into this class
+	int mClientWidth = 800;
+	int mClientHeight = 600;
 
-	RenderPacket* ActiveObject = nullptr;
+
+	RenderPacket* mActiveObject = nullptr;
+	enum class SELECTED_AXIS {X, Y, Z, SIZE, NONE};
+	RenderPacket* mEditingAxis[3] = { nullptr, nullptr, nullptr };
+	SELECTED_AXIS mSelectedAxis = SELECTED_AXIS::NONE;
 	std::vector<std::string> mObjectFiles;
-	//std::vector<std::string> mAvailableObjects;
-	//std::vector<std::string> mAvailableMaterials;
-
-	bool mReady = false;
 };

@@ -347,8 +347,8 @@ bool GraphicsCore::InitDirect3D()
 
 	ASSERT_HR(CreateDXGIFactory2(dxgiFactoryFlags, IID_PPV_ARGS(&mdxgiFactory)));
 
-	// Create hardware device for default adapter with feature level 11
-	HRESULT hr = D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&md3dDevice));
+	// Create hardware device for default adapter with feature level 12
+	HRESULT hr = D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_12_0, IID_PPV_ARGS(&md3dDevice));
 	if (FAILED(hr))
 	{
 		// Fallback to warp device if default

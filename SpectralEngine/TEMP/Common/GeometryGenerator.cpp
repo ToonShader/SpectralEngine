@@ -613,6 +613,80 @@ GeometryGenerator::MeshData GeometryGenerator::CreateGrid(float width, float dep
     return meshData;
 }
 
+GeometryGenerator::MeshData GeometryGenerator::CreateAxisArrow()
+{
+	MeshData meshData;
+
+	meshData.Vertices.resize(7);
+	meshData.Indices32.resize(9);
+
+	//
+	// Create the vertices.
+	//
+
+	// 4 vertices of main shaft (simple rectangle)
+	meshData.Vertices[0] = Vertex(
+		0.0f, 0.0f, 0.0f,
+		0.0f, 0.0f, -1.0f,
+		1.0f, 0.0f, 0.0f,
+		0.0f, 0.0f);
+
+	meshData.Vertices[1] = Vertex(
+		1.0f, 0.0f, 0.0f,
+		0.0f, 0.0f, -1.0f,
+		1.0f, 0.0f, 0.0f,
+		1.0f, 0.0f);
+
+	meshData.Vertices[2] = Vertex(
+		0.0f, 0.3f, 0.0f,
+		0.0f, 0.0f, -1.0f,
+		1.0f, 0.0f, 0.0f,
+		0.0f, 1.0f);
+
+	meshData.Vertices[3] = Vertex(
+		1.0f, 0.3f, 0.0f,
+		0.0f, 0.0f, -1.0f,
+		1.0f, 0.0f, 0.0f,
+		1.0f, 1.0f);
+
+	// 3 vertices of tip triangle
+	meshData.Vertices[4] = Vertex(
+		1.0f, -0.2f, 0.0f,
+		0.0f, 0.0f, -1.0f,
+		1.0f, 0.0f, 0.0f,
+		1.0f, 1.0f);
+
+	meshData.Vertices[5] = Vertex(
+		1.0f, 0.5f, 0.0f,
+		0.0f, 0.0f, -1.0f,
+		1.0f, 0.0f, 0.0f,
+		1.0f, 1.0f);
+
+	meshData.Vertices[6] = Vertex(
+		1.3f, 0.15f, 0.0f,
+		0.0f, 0.0f, -1.0f,
+		1.0f, 0.0f, 0.0f,
+		1.0f, 1.0f);
+
+	//
+	// Create the indices.
+	//
+
+	meshData.Indices32[0] = 0;
+	meshData.Indices32[1] = 2;
+	meshData.Indices32[2] = 1;
+
+	meshData.Indices32[3] = 2;
+	meshData.Indices32[4] = 3;
+	meshData.Indices32[5] = 1;
+
+	meshData.Indices32[6] = 4;
+	meshData.Indices32[7] = 5;
+	meshData.Indices32[8] = 6;
+
+	return meshData;
+}
+
 GeometryGenerator::MeshData GeometryGenerator::CreateQuad(float x, float y, float w, float h, float depth)
 {
     MeshData meshData;

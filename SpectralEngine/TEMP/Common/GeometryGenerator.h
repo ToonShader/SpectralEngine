@@ -107,6 +107,11 @@ public:
     MeshData CreateGrid(float width, float depth, uint32 m, uint32 n);
 
 	///<summary>
+	/// Creates the single arrow intended for use to represent coordinate space origins.
+	///</summary>
+	MeshData CreateAxisArrow();
+
+	///<summary>
 	/// Creates a quad aligned with the screen.  This is useful for postprocessing and screen effects.
 	///</summary>
     MeshData CreateQuad(float x, float y, float w, float h, float depth);

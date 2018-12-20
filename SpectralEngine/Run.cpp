@@ -33,12 +33,11 @@ std::unique_ptr<WindowManager> gWindow;
 
 void CalculateFrameStats(Timer& timer, HWND hWnd);
 
+SceneManager gSceneManager;
+
 void OnMouseDown(WPARAM btnState, int x, int y);
 void OnMouseUp(WPARAM btnState, int x, int y);
 void OnMouseMove(WPARAM btnState, int x, int y);
-POINT gLastMousePos;
-Camera gSceneCamera;
-float gRotateX;
 
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
@@ -58,6 +57,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	//	}
 	//	return 0;
 
+	// TODO: Either move this handler into SceneManager, or add a resize method.
 	case WM_SIZE:
 		if (gWindow != nullptr)
 		{
@@ -83,8 +83,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				int clientWidth, clientHeight;
 				gWindow->GetDimensions(clientWidth, clientHeight);
 				gGraphicsCore->Resize(clientWidth, clientHeight);
-				gSceneCamera.SetLens(0.25f * XM_PI, static_cast<float>(clientWidth) / clientHeight, 1.0f, 1000.0f);
-
+				gSceneManager.Resize(clientWidth, clientHeight);
+				
 				//OutputDebugString(L"B\n");
 			}
 			else if (wParam == SIZE_RESTORED)
@@ -93,7 +93,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				int clientWidth, clientHeight;
 				gWindow->GetDimensions(clientWidth, clientHeight);
 				gGraphicsCore->Resize(clientWidth, clientHeight);
-				gSceneCamera.SetLens(0.25f * XM_PI, static_cast<float>(clientWidth) / clientHeight, 1.0f, 1000.0f);
+				gSceneManager.Resize(clientWidth, clientHeight);
 				//// Restoring from minimized state?
 				//if (mMinimized)
 				//{
@@ -138,7 +138,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			int clientWidth, clientHeight;
 			gWindow->GetDimensions(clientWidth, clientHeight);
 			gGraphicsCore->Resize(clientWidth, clientHeight);
-			gSceneCamera.SetLens(0.25f * XM_PI, static_cast<float>(clientWidth) / clientHeight, 1.0f, 1000.0f);
+			gSceneManager.Resize(clientWidth, clientHeight);
 		}
 		break;
 
@@ -167,9 +167,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		OnMouseMove(wParam, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
 		break;
 
-	case WM_KEYUP:
+	case WM_KEYDOWN:
 		if (wParam == VK_ESCAPE)
 			PostQuitMessage(0);
+		else
+			gSceneManager.OnKeyDown(wParam, lParam);
 		break;
 
 	//case WM_SYSKEYUP:
@@ -211,8 +213,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE prevInstance,
 		gWindow = std::make_unique<WindowManager>(hInstance, L"Spectral Demo");
 		gWindow->InitWindow(800, 600, WndProc);
 		gGraphicsCore = Spectral::Graphics::GraphicsCore::GetGraphicsCoreInstance(gWindow->getHandle());
-		SceneManager scene;
-		scene.Initialize(gGraphicsCore);
+		gSceneManager.Initialize(gGraphicsCore);
+		gSceneManager.Resize(800, 600);
 
 		#ifdef BENCHMARK
 		gGraphicsCore->SetFullScreen(true);
@@ -221,11 +223,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE prevInstance,
 		float radius = 60.0f;
 		#endif
 
-		int width, height;
-		gWindow->GetDimensions(width, height);
-		gSceneCamera.SetLens(0.25f * XM_PI, static_cast<float>(width) / height, 1.0f, 1000.0f);
-		gSceneCamera.LookAt(XMFLOAT3(0, 18, -60), XMFLOAT3(0, 18, -59), XMFLOAT3(0.0f, 1.0f, 0.0f));
-		gSceneCamera.UpdateViewMatrix();
+
 
 		Timer timer;
 		timer.Reset();
@@ -254,9 +252,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE prevInstance,
 			gSceneCamera.LookAt(XMFLOAT3(x, y, z), XMFLOAT3(0.0f, 0.0f, 0.0f), XMFLOAT3(0.0f, 1.0f, 0.0f));
 			#endif
 
-			gSceneCamera.UpdateViewMatrix();
-			scene.UpdateScene(timer.DeltaTime(), gSceneCamera);
-			scene.DrawScene();
+			
+			gSceneManager.UpdateScene(timer.DeltaTime());
+			gSceneManager.DrawScene();
 
 			timer.Tick();
 
@@ -321,55 +319,19 @@ void CalculateFrameStats(Timer& timer, HWND hWnd)
 
 void OnMouseDown(WPARAM btnState, int x, int y)
 {
-	gLastMousePos.x = x;
-	gLastMousePos.y = y;
-
 	SetCapture(gWindow->getHandle());
+	gSceneManager.OnMouseDown(btnState, x, y);
 }
 
 void OnMouseUp(WPARAM btnState, int x, int y)
 {
+	gSceneManager.OnMouseUp(btnState, x, y);
 	ReleaseCapture();
 }
 
 void OnMouseMove(WPARAM btnState, int x, int y)
 {
-	if ((btnState & MK_LBUTTON) != 0)
-	{
-		float dx = (x - gLastMousePos.x) / 600.0f;
-		float dy = (y - gLastMousePos.y) / 800.0f;
-		
-		// Rotate by the opposite of the desired angle to
-		// emulate the effect of dragging the scene around.
-		gSceneCamera.RotateY(-dx);
-		gSceneCamera.RotateX(-dy);
-
-		gRotateX += -dy;
-	}
-	else if ((btnState & MK_RBUTTON) != 0)
-	{
-		float dx = 0.05f*static_cast<float>(x - gLastMousePos.x);
-		float dy = 0.05f*static_cast<float>(y - gLastMousePos.y);
-
-		XMFLOAT3 pos = gSceneCamera.GetPosition3f();
-		pos.y += dy;
-		gSceneCamera.SetPosition(pos);
-		// gSceneCamera.Strafe(-dx); // Inverted for dragging effect
-	}
-	else if ((btnState & MK_MBUTTON) != 0)
-	{
-		float dx = 0.05f*static_cast<float>(x - gLastMousePos.x);
-		float dy = 0.05f*static_cast<float>(y - gLastMousePos.y);
-
-		// Move the camera in such a fashion that the World Y-axis is the up vector for the camera
-		gSceneCamera.RotateX(-gRotateX);
-		gSceneCamera.Walk(dy);
-		gSceneCamera.Strafe(-dx); // Inverted for dragging effect
-		gSceneCamera.RotateX(gRotateX);
-	}
-
-	gLastMousePos.x = x;
-	gLastMousePos.y = y;
+	gSceneManager.OnMouseMove(btnState, x, y);
 }
 
 /*
