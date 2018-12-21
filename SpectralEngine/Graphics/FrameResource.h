@@ -114,7 +114,7 @@ struct Vertex
 {
 	DirectX::XMFLOAT3 Position;
 	DirectX::XMFLOAT3 Normal;
-	DirectX::XMFLOAT2 TexCoord;
+	DirectX::XMFLOAT2 TexCoord; // TODO: Verify this order is following the c++/dx packing rules
 	DirectX::XMFLOAT3 Tangent;
 };
 

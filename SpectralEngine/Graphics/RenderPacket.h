@@ -24,6 +24,10 @@ struct RenderPacket
 	Mesh* Geo = nullptr;
 
 	NamedPSO PSO = NamedPSO::Default;
+	// TODO: If I make this a sub-mesh, I can iterate in the renderer as
+	//		 as a way to combine meshes into a single render packet; Would
+	//		 be useful when you want to repeat geometry without instancing,
+	//		 or when the geometry isn't contiguous in the buffer.
 	// Info to index into mesh for drawing
 	UINT IndexCount = 0;
 	UINT StartIndexLocation = 0;

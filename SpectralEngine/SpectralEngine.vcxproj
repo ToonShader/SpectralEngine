@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -19,6 +19,8 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Asset_Conditioning\ObjectConditioner.h" />
+    <ClInclude Include="Asset_Conditioning\tiny_obj_loader.h" />
     <ClInclude Include="Common\Camera.h" />
     <ClInclude Include="Common\Math.h" />
     <ClInclude Include="Common\Timer.h" />
@@ -33,10 +35,12 @@
     <ClInclude Include="Graphics\RenderPacket.h" />
     <ClInclude Include="Microsoft\d3dx12.h" />
     <ClInclude Include="Microsoft\DDSTextureLoader.h" />
+    <ClInclude Include="Scene\SceneManager.h" />
     <ClInclude Include="TEMP\Common\GeometryGenerator.h" />
     <None Include="TEMP\FrameResource.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Asset_Conditioning\ObjectConditioner.cpp" />
     <ClCompile Include="Common\Camera.cpp" />
     <ClCompile Include="Common\Math.cpp" />
     <ClCompile Include="Common\Timer.cpp" />
@@ -47,6 +51,7 @@
     <ClCompile Include="Graphics\RenderPacket.cpp" />
     <ClCompile Include="Microsoft\DDSTextureLoader.cpp" />
     <ClCompile Include="Run.cpp" />
+    <ClCompile Include="Scene\SceneManager.cpp" />
     <ClCompile Include="TEMP\Common\GeometryGenerator.cpp" />
     <None Include="TEMP\FrameResource.cpp" />
     <None Include="TEMP\TexColumnsApp.cpp" />
@@ -61,6 +66,7 @@
   <ItemGroup>
     <None Include="Shaders\Default.hlsl">
       <FileType>Document</FileType>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">5.1</ShaderModel>
     </None>
     <None Include="Shaders\LightingUtil.hlsl">
       <FileType>Document</FileType>
@@ -74,12 +80,20 @@
       <FileType>Document</FileType>
     </None>
   </ItemGroup>
+  <ItemGroup>
+    <None Include="Shaders\Common.hlsl">
+      <FileType>Document</FileType>
+    </None>
+    <None Include="Shaders\Sky.hlsl">
+      <FileType>Document</FileType>
+    </None>
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>
     <ProjectGuid>{F74C5BF5-1079-454E-93FF-EE798FB5A65F}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>SpectralEngine</RootNamespace>
-    <WindowsTargetPlatformVersion>10.0.16299.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0.17134.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -151,6 +165,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <FxCompile>
       <EntryPointName>main</EntryPointName>

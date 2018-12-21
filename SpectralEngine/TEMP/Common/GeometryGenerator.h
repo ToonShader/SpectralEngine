@@ -57,6 +57,7 @@ public:
 	{
 		std::vector<Vertex> Vertices;
         std::vector<uint32> Indices32;
+		std::string Name;
 
         std::vector<uint16>& GetIndices16()
         {
@@ -104,6 +105,11 @@ public:
 	/// at the origin with the specified width and depth.
 	///</summary>
     MeshData CreateGrid(float width, float depth, uint32 m, uint32 n);
+
+	///<summary>
+	/// Creates the single arrow intended for use to represent coordinate space origins.
+	///</summary>
+	MeshData CreateAxisArrow();
 
 	///<summary>
 	/// Creates a quad aligned with the screen.  This is useful for postprocessing and screen effects.

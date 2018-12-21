@@ -7,15 +7,17 @@
 #include <DirectXColors.h>
 #include <d3dcompiler.h>
 #include <d3d12SDKLayers.h>
-#include <nvToolsExt.h>
+//#include <nvToolsExt.h>
 
 //#pragma comment(lib, "d3dcompiler.lib")
 #pragma comment(lib, "D3D12.lib")
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "d3dcompiler.lib")
 
+//using namespace SpectralEditor;
+
 // Simple toggle for benchmarking to disable debug layers
-#define RELEASE
+//#define RELEASE
 
 
 #ifndef RELEASE
@@ -228,7 +230,7 @@ void GraphicsCore::RenderPrePass()
 
 void GraphicsCore::testrender(const Camera& camera)
 {
-	nvtxRangePushW(L"Scene Render");
+	//nvtxRangePushW(L"Scene Render");
 
 	DirectX::XMStoreFloat4x4(&mProj, camera.GetProj());
 	DirectX::XMStoreFloat4x4(&mView, camera.GetView());
@@ -282,7 +284,7 @@ void GraphicsCore::testrender(const Camera& camera)
 	mCommandList->ClearRenderTargetView(CurrentBackBufferView(), Colors::LightSteelBlue, 0, nullptr);
 	mCommandList->ClearDepthStencilView(DepthStencilView(), D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
 
-	// Specify the buffers we are going to render to.
+	// Specify the buffers we are going to crerender to.
 	mCommandList->OMSetRenderTargets(1, &CurrentBackBufferView(), true, &DepthStencilView());
 
 	//ID3D12DescriptorHeap* descriptorHeaps[] = { mCbvHeap.Get() };
@@ -326,7 +328,7 @@ void GraphicsCore::testrender(const Camera& camera)
 
 #pragma endregion
 
-	nvtxRangePop();
+	//nvtxRangePop();
 }
 
 #define D3DCOMPILE_DEBUG 1
@@ -345,8 +347,8 @@ bool GraphicsCore::InitDirect3D()
 
 	ASSERT_HR(CreateDXGIFactory2(dxgiFactoryFlags, IID_PPV_ARGS(&mdxgiFactory)));
 
-	// Create hardware device for default adapter with feature level 11
-	HRESULT hr = D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&md3dDevice));
+	// Create hardware device for default adapter with feature level 12
+	HRESULT hr = D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_12_0, IID_PPV_ARGS(&md3dDevice));
 	if (FAILED(hr))
 	{
 		// Fallback to warp device if default
@@ -482,7 +484,7 @@ void GraphicsCore::CreateSwapChain()
 	scDesc.Width = mClientWidth;
 	scDesc.Height = mClientHeight;
 	scDesc.Format = mBackBufferFormat;
-	scDesc.Scaling = DXGI_SCALING_NONE;
+	scDesc.Scaling = DXGI_SCALING_NONE; // STRETCH required for UWP integration
 	scDesc.SampleDesc.Count = 1; //m4xMsaaState ? 4 : 1;
 	scDesc.SampleDesc.Quality = 0; //m4xMsaaState ? (m4xMsaaQuality - 1) : 0;
 	scDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
@@ -498,7 +500,7 @@ void GraphicsCore::CreateSwapChain()
 
 void GraphicsCore::FlushCommandQueue()
 {
-	nvtxRangePushW(L"Flush CQ");
+	//nvtxRangePushW(L"Flush CQ");
 
 	// Mark new fence value
 	mCurrentFence++;
@@ -522,12 +524,12 @@ void GraphicsCore::FlushCommandQueue()
 		CloseHandle(eventHandle);
 	}*/
 
-	nvtxRangePop();
+	//nvtxRangePop();
 }
 
 void GraphicsCore::UpdateObjectCBs(const std::vector<RenderPacket*>& packets, int startIndex, int numToUpdate)
 {
-	nvtxRangePushW(L"Update OCBs");
+	//nvtxRangePushW(L"Update OCBs");
 
 	assert(numToUpdate <= NUM_CBUFFERS);
 	auto currObjectCB = mCurrFrameResource->ObjectCB.get();
@@ -554,12 +556,12 @@ void GraphicsCore::UpdateObjectCBs(const std::vector<RenderPacket*>& packets, in
 		//}
 	}
 
-	nvtxRangePop();
+	//nvtxRangePop();
 }
 
 void GraphicsCore::UpdateMaterialCBs(const std::vector<RenderPacket*>& packets, int startIndex, int numToUpdate)
 {
-	nvtxRangePushW(L"Update MCBs");
+	//nvtxRangePushW(L"Update MCBs");
 
 	assert(numToUpdate <= NUM_CBUFFERS);
 	auto currMaterialCB = mCurrFrameResource->MaterialCB.get();
@@ -586,12 +588,12 @@ void GraphicsCore::UpdateMaterialCBs(const std::vector<RenderPacket*>& packets, 
 		//}
 	}
 
-	nvtxRangePop();
+	//nvtxRangePop();
 }
 
 void GraphicsCore::UpdateMainPassCB()
 {
-	nvtxRangePushW(L"Update MPCB");
+	//nvtxRangePushW(L"Update MPCB");
 
 	// This is overkill for now, but may prove useful in the future if
 	// I decide to keep per-pass CBs
@@ -684,7 +686,7 @@ void GraphicsCore::UpdateMainPassCB()
 	auto currPassCB = mCurrFrameResource->PassCB.get();
 	currPassCB->CopyData(0, mMainPassCB);
 
-	nvtxRangePop();
+	//nvtxRangePop();
 }
 
 void Spectral::Graphics::GraphicsCore::CullObjectsByFrustum(std::vector<RenderPacket*>& visible, const std::vector<RenderPacket*>& objects, const DirectX::BoundingFrustum& frustum, FXMMATRIX view)
@@ -787,7 +789,7 @@ void GraphicsCore::BuildDescriptorHeaps()
 
 	// Create the SRV heap for textures.
 	D3D12_DESCRIPTOR_HEAP_DESC srvHeapDesc = {};
-	srvHeapDesc.NumDescriptors = 3 + 3 + 1; // 3 textures + 3 normal maps (will be configurable soon) + cube map
+	srvHeapDesc.NumDescriptors = 3 + 3 + 1; // 3 textures + 3 normal maps (will be configurable soon (maybe)) + cube map
 	srvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 	srvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 	ASSERT_HR(md3dDevice->CreateDescriptorHeap(&srvHeapDesc, IID_PPV_ARGS(&mSrvDescriptorHeap)));
@@ -965,7 +967,7 @@ void GraphicsCore::BuildFrameResources()
 
 void GraphicsCore::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, ID3D12CommandAllocator* listAlloc, const std::vector<RenderPacket*>& ritems)
 {
-	nvtxRangePushW(L"Draw Items");
+	//nvtxRangePushW(L"Draw Items");
 
 	UINT objCBByteSize = CalcConstantBufferByteSize(sizeof(ObjectConstants));
 
@@ -1108,7 +1110,7 @@ void GraphicsCore::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, ID3D12Com
 
 	// TODO: Clean command list by executing commands before exiting?
 
-	nvtxRangePop();
+	//nvtxRangePop();
 }
 
 void GraphicsCore::BuildRootSignature()
@@ -1292,7 +1294,7 @@ void GraphicsCore::SubmitSceneTextures(std::vector<Texture*>& texes, std::vector
 			handle.Offset(1, mCbvSrvUavDescriptorSize);
 
 		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING; // TODO: What?
 		srvDesc.Format = texResource->GetDesc().Format;
 		if (texes[i]->Type == Texture::Tex2D)
 		{
