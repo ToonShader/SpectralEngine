@@ -47,6 +47,7 @@ private:
 	int mClientHeight = 600;
 
 
+	bool mEditing = false;
 	RenderPacket* mActiveObject = nullptr;
 	enum class SELECTED_AXIS {X, Y, Z, SIZE, NONE};
 	RenderPacket* mEditingAxis[3] = { nullptr, nullptr, nullptr };

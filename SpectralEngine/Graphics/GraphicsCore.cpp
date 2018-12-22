@@ -17,7 +17,7 @@
 //using namespace SpectralEditor;
 
 // Simple toggle for benchmarking to disable debug layers
-//#define RELEASE
+#define RELEASE
 
 
 #ifndef RELEASE

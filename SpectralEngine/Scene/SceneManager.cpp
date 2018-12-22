@@ -1,3 +1,5 @@
+#define RELEASE
+
 #include "SceneManager.h"
 #include "Asset_Conditioning/ObjectConditioner.h"
 #include "Common\Utility.h"
@@ -49,7 +51,7 @@ void SceneManager::UpdateScene(float dt)
 {
 	mSceneCamera.UpdateViewMatrix();
 
-	if (mActiveObject)
+	if (mEditing && mActiveObject)
 	{
 		// Update the editing axis to be at the origin of the active object.
 		for (int i = 0; i < static_cast<int>(SELECTED_AXIS::SIZE); ++i)
@@ -258,68 +260,69 @@ void SceneManager::BuildRenderItems()
 	for (auto& e : mAllRitems)
 		packets.push_back(e.get());
 
-	//// Quick and dirty way to duplicate the scene on the X and Z axis
-	//for (RenderPacket* packet : packets)
-	//{
-	//	for (int i = -4; i < 5; ++i)
-	//	{
-	//		if (i == 0)
-	//			continue;
+	// Quick and dirty way to duplicate the scene on the X and Z axis
+	for (RenderPacket* packet : packets)
+	{
+		for (int i = -4; i < 5; ++i)
+		{
+			if (i == 0)
+				continue;
 
-	//		auto temp = std::make_unique<RenderPacket>();
-	//		*temp = *packet;
-	//		XMStoreFloat4x4(&temp->World, XMLoadFloat4x4(&temp->World)*XMMatrixTranslation(30.0f * i, 0.0f, 0.0f));
-	//		mAllRitems.push_back(std::move(temp));
-	//	}
-	//}
-	//packets.clear();
-	//for (auto& e : mAllRitems)
-	//	packets.push_back(e.get());
+			auto temp = std::make_unique<RenderPacket>();
+			*temp = *packet;
+			XMStoreFloat4x4(&temp->World, XMLoadFloat4x4(&temp->World)*XMMatrixTranslation(30.0f * i, 0.0f, 0.0f));
+			mAllRitems.push_back(std::move(temp));
+		}
+	}
+	packets.clear();
+	for (auto& e : mAllRitems)
+		packets.push_back(e.get());
 
-	//for (RenderPacket* packet : packets)
-	//{
-	//	for (int i = -4; i < 5; ++i)
-	//	{
-	//		if (i == 0)
-	//			continue;
+	for (RenderPacket* packet : packets)
+	{
+		for (int i = -4; i < 5; ++i)
+		{
+			if (i == 0)
+				continue;
 
-	//		auto temp = std::make_unique<RenderPacket>();
-	//		*temp = *packet;
-	//		XMStoreFloat4x4(&temp->World, XMLoadFloat4x4(&temp->World)*XMMatrixTranslation(0.0f, 0.0f, 30.0f * i));
-	//		mAllRitems.push_back(std::move(temp));
-	//	}
-	//}
-	//packets.clear();
-	//for (auto& e : mAllRitems)
-	//	packets.push_back(e.get());
+			auto temp = std::make_unique<RenderPacket>();
+			*temp = *packet;
+			XMStoreFloat4x4(&temp->World, XMLoadFloat4x4(&temp->World)*XMMatrixTranslation(0.0f, 0.0f, 30.0f * i));
+			mAllRitems.push_back(std::move(temp));
+		}
+	}
+	packets.clear();
+	for (auto& e : mAllRitems)
+		packets.push_back(e.get());
 
-	// A coordinate axis for editing
-	auto x_axis = std::make_unique<RenderPacket>();
-	x_axis->Mat = mMaterials["default"].get();
-	x_axis->Geo = mGeometries["shapeGeo"].get();
-	x_axis->PSO = NamedPSO::Default;
-	x_axis->IndexCount = x_axis->Geo->DrawArgs["axis_arrow"].IndexCount;
-	x_axis->StartIndexLocation = x_axis->Geo->DrawArgs["axis_arrow"].StartIndexLocation;
-	x_axis->BaseVertexLocation = x_axis->Geo->DrawArgs["axis_arrow"].BaseVertexLocation;
-	x_axis->Bounds = x_axis->Geo->DrawArgs["axis_arrow"].Bounds;
+	if (mEditing)
+	{
+		// A coordinate axis for editing
+		auto x_axis = std::make_unique<RenderPacket>();
+		x_axis->Mat = mMaterials["default"].get();
+		x_axis->Geo = mGeometries["shapeGeo"].get();
+		x_axis->PSO = NamedPSO::Default;
+		x_axis->IndexCount = x_axis->Geo->DrawArgs["axis_arrow"].IndexCount;
+		x_axis->StartIndexLocation = x_axis->Geo->DrawArgs["axis_arrow"].StartIndexLocation;
+		x_axis->BaseVertexLocation = x_axis->Geo->DrawArgs["axis_arrow"].BaseVertexLocation;
+		x_axis->Bounds = x_axis->Geo->DrawArgs["axis_arrow"].Bounds;
 
-	auto y_axis = std::make_unique<RenderPacket>();
-	auto z_axis = std::make_unique<RenderPacket>();
-	*y_axis = *z_axis = *x_axis;
-	XMStoreFloat4x4(&y_axis->World, XMMatrixRotationZ(XM_PI / 2.0f));
-	XMStoreFloat4x4(&z_axis->World, XMMatrixRotationY(XM_PI / -2.0f));
+		auto y_axis = std::make_unique<RenderPacket>();
+		auto z_axis = std::make_unique<RenderPacket>();
+		*y_axis = *z_axis = *x_axis;
+		XMStoreFloat4x4(&y_axis->World, XMMatrixRotationZ(XM_PI / 2.0f));
+		XMStoreFloat4x4(&z_axis->World, XMMatrixRotationY(XM_PI / -2.0f));
 
-	mEditingAxis[0] = x_axis.get();
-	mEditingAxis[1] = y_axis.get();
-	mEditingAxis[2] = z_axis.get();
-	packets.push_back(x_axis.get());
-	packets.push_back(y_axis.get());
-	packets.push_back(z_axis.get());
-	mAllRitems.push_back(std::move(x_axis));
-	mAllRitems.push_back(std::move(y_axis));
-	mAllRitems.push_back(std::move(z_axis));
-
-	mGraphicsCore->SubmitRenderPackets(packets);
+		mEditingAxis[0] = x_axis.get();
+		mEditingAxis[1] = y_axis.get();
+		mEditingAxis[2] = z_axis.get();
+		packets.push_back(x_axis.get());
+		packets.push_back(y_axis.get());
+		packets.push_back(z_axis.get());
+		mAllRitems.push_back(std::move(x_axis));
+		mAllRitems.push_back(std::move(y_axis));
+		mAllRitems.push_back(std::move(z_axis));
+	}
 
 	// Add the sky sphere last
 	auto skyRitem = std::make_unique<RenderPacket>();
@@ -519,49 +522,8 @@ void SceneManager::OnMouseDown(WPARAM btnState, int sx, int sy)
 
 	//SetCapture(gWindow->getHandle());
 
-	mSceneCamera.UpdateViewMatrix();
-	const XMFLOAT4X4& proj = mSceneCamera.GetProj4x4f();
-	float vx = (+2.0f*sx / mClientWidth - 1.0f) / proj(0, 0);
-	float vy = (-2.0f*sy / mClientHeight + 1.0f) / proj(1, 1);
-
-	//// For screen space picking
-	//vx = (+2.0f*sx / mClientWidth - 1.0f);
-	//vy = (-2.0f*sy / mClientHeight + 1.0f);
-	//rayOrigin = XMVectorSet(0.0f, 0.0f, -1.0f, 1.0f);
-	//rayDir = XMVectorSet(vx, vy, 1.0f, 0.0f);
-	//XMMATRIX invView = XMMatrixInverse(&XMMatrixDeterminant(view), view);
-
-	mSelectedAxis = SELECTED_AXIS::NONE;
-	XMVECTOR rayOrigin = XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f);
-	XMVECTOR rayDir = XMVector3Normalize(XMVectorSet(vx, vy, 1.0f, 0.0f));
-	float minDistance = D3D12_FLOAT32_MAX;
-	for (int i = 0; i < static_cast<int>(SELECTED_AXIS::SIZE); ++i)
+	if (mEditing)
 	{
-		// TODO: Switch to picking in world space?
-		// Perform containment check in view space
-		XMMATRIX world = XMLoadFloat4x4(&mEditingAxis[i]->World);
-		XMMATRIX worldView = XMMatrixMultiply(world, mSceneCamera.GetView());
-
-		DirectX::BoundingBox viewBox;
-		mEditingAxis[i]->Bounds.Transform(viewBox, worldView);
-		float distance;
-		if (viewBox.Intersects(rayOrigin, rayDir, distance) && distance < minDistance)
-		{
-			mSelectedAxis = static_cast<SELECTED_AXIS>(i);
-			minDistance = distance;
-		}
-	}
-}
-
-void SceneManager::OnMouseUp(WPARAM btnState, int sx, int sy)
-{
-	ReleaseCapture();
-
-	// They tried to click an object, find it and switch to it.
-	if (mLastMouseDownPos.x - sx == 0 && mLastMouseDownPos.y - sy == 0)
-	{
-		// Technically this is mostly duplicate code, for now, but will
-		// soon be different to increase picking precision.
 		mSceneCamera.UpdateViewMatrix();
 		const XMFLOAT4X4& proj = mSceneCamera.GetProj4x4f();
 		float vx = (+2.0f*sx / mClientWidth - 1.0f) / proj(0, 0);
@@ -572,43 +534,90 @@ void SceneManager::OnMouseUp(WPARAM btnState, int sx, int sy)
 		//vy = (-2.0f*sy / mClientHeight + 1.0f);
 		//rayOrigin = XMVectorSet(0.0f, 0.0f, -1.0f, 1.0f);
 		//rayDir = XMVectorSet(vx, vy, 1.0f, 0.0f);
+		//XMMATRIX invView = XMMatrixInverse(&XMMatrixDeterminant(view), view);
 
-		RenderPacket* pickedObject = nullptr;
+		mSelectedAxis = SELECTED_AXIS::NONE;
 		XMVECTOR rayOrigin = XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f);
 		XMVECTOR rayDir = XMVector3Normalize(XMVectorSet(vx, vy, 1.0f, 0.0f));
 		float minDistance = D3D12_FLOAT32_MAX;
-		for (int i = 0; i < mAllRitems.size(); ++i)
+		for (int i = 0; i < static_cast<int>(SELECTED_AXIS::SIZE); ++i)
 		{
 			// TODO: Switch to picking in world space?
 			// Perform containment check in view space
-			XMMATRIX world = XMLoadFloat4x4(&mAllRitems[i]->World);
+			XMMATRIX world = XMLoadFloat4x4(&mEditingAxis[i]->World);
 			XMMATRIX worldView = XMMatrixMultiply(world, mSceneCamera.GetView());
 
 			DirectX::BoundingBox viewBox;
-			mAllRitems[i]->Bounds.Transform(viewBox, worldView);
+			mEditingAxis[i]->Bounds.Transform(viewBox, worldView);
 			float distance;
-			bool isAxis = false;
-			for (int j = 0; j < static_cast<int>(SELECTED_AXIS::SIZE); ++j)
-				if (mAllRitems[i].get() == mEditingAxis[j])
-					isAxis = true;
-			if (isAxis)
-				continue;
-
-			// Ray length can be negative, so must use ABS
-			if (viewBox.Intersects(rayOrigin, rayDir, distance) && abs(distance) < minDistance)
+			if (viewBox.Intersects(rayOrigin, rayDir, distance) && distance < minDistance)
 			{
-				pickedObject = mAllRitems[i].get();
-				minDistance = abs(distance);
+				mSelectedAxis = static_cast<SELECTED_AXIS>(i);
+				minDistance = distance;
 			}
 		}
+	}
+}
 
-		mActiveObject = pickedObject;
+void SceneManager::OnMouseUp(WPARAM btnState, int sx, int sy)
+{
+	ReleaseCapture();
+
+	if (mEditing)
+	{
+		// They tried to click an object, find it and switch to it.
+		if (mLastMouseDownPos.x - sx == 0 && mLastMouseDownPos.y - sy == 0)
+		{
+			// Technically this is mostly duplicate code, for now, but will
+			// soon be different to increase picking precision.
+			mSceneCamera.UpdateViewMatrix();
+			const XMFLOAT4X4& proj = mSceneCamera.GetProj4x4f();
+			float vx = (+2.0f*sx / mClientWidth - 1.0f) / proj(0, 0);
+			float vy = (-2.0f*sy / mClientHeight + 1.0f) / proj(1, 1);
+
+			//// For screen space picking
+			//vx = (+2.0f*sx / mClientWidth - 1.0f);
+			//vy = (-2.0f*sy / mClientHeight + 1.0f);
+			//rayOrigin = XMVectorSet(0.0f, 0.0f, -1.0f, 1.0f);
+			//rayDir = XMVectorSet(vx, vy, 1.0f, 0.0f);
+
+			RenderPacket* pickedObject = nullptr;
+			XMVECTOR rayOrigin = XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f);
+			XMVECTOR rayDir = XMVector3Normalize(XMVectorSet(vx, vy, 1.0f, 0.0f));
+			float minDistance = D3D12_FLOAT32_MAX;
+			for (int i = 0; i < mAllRitems.size(); ++i)
+			{
+				// TODO: Switch to picking in world space?
+				// Perform containment check in view space
+				XMMATRIX world = XMLoadFloat4x4(&mAllRitems[i]->World);
+				XMMATRIX worldView = XMMatrixMultiply(world, mSceneCamera.GetView());
+
+				DirectX::BoundingBox viewBox;
+				mAllRitems[i]->Bounds.Transform(viewBox, worldView);
+				float distance;
+				bool isAxis = false;
+				for (int j = 0; j < static_cast<int>(SELECTED_AXIS::SIZE); ++j)
+					if (mAllRitems[i].get() == mEditingAxis[j])
+						isAxis = true;
+				if (isAxis)
+					continue;
+
+				// Ray length can be negative, so must use ABS
+				if (viewBox.Intersects(rayOrigin, rayDir, distance) && abs(distance) < minDistance)
+				{
+					pickedObject = mAllRitems[i].get();
+					minDistance = abs(distance);
+				}
+			}
+
+			mActiveObject = pickedObject;
+		}
 	}
 }
 
 void SceneManager::OnMouseMove(WPARAM btnState, int sx, int sy)
 {
-	if ((btnState & MK_LBUTTON) != 0 && mSelectedAxis != SELECTED_AXIS::NONE)
+	if (mEditing && (btnState & MK_LBUTTON) != 0 && mSelectedAxis != SELECTED_AXIS::NONE)
 	{
 		if (mActiveObject)
 		{
@@ -670,7 +679,8 @@ void SceneManager::OnMouseMove(WPARAM btnState, int sx, int sy)
 void SceneManager::OnKeyDown(WPARAM keyState, LPARAM lParam)
 {
 	// Duplicate the active object on ctrl + v
-	if (keyState == 'V' &&
+	if (mEditing &&
+		keyState == 'V' &&
 		(GetKeyState(VK_CONTROL) & 0x8000) &&
 		(lParam & (1 << 30)) == 0) // Only on the first message for this key
 	{
