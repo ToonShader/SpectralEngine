@@ -51,6 +51,7 @@ namespace Spectral
 			// Potential Feature: Support runtime switching of render window
 
 			void SubmitRenderPackets(const std::vector<RenderPacket*>& packets /* SOME ENUM HERE FOR PSO?? */);
+			void SubmitSceneLights(const std::vector<Light>& lights, int beg, int end);
 			// /*virtual*/ LRESULT MsgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 			/*virtual*/ void RenderPrePass(/*const Timer& gt*/); /*= 0;*/
 			/*virtual*/ void Render(/*const Timer& gt*/); /*= 0;*/
@@ -96,9 +97,10 @@ namespace Spectral
 			FrameResource* mCurrFrameResource = nullptr;
 			void DrawRenderItems(ID3D12GraphicsCommandList* cmdList, ID3D12CommandAllocator* listAlloc, const std::vector<RenderPacket*>& ritems);
 
+			void UpdateMainPassCB();
 			void UpdateObjectCBs(const std::vector<RenderPacket*>& packets, int startIndex, int numToUpdate);
 			void UpdateMaterialCBs(const std::vector<RenderPacket*>& packets, int startIndex, int numToUpdate);
-			void UpdateMainPassCB();
+			void UpdateLightSRV(const std::vector<Light>& lights, int startIndex, int numToUpdate);
 
 			void CullObjectsByFrustum(std::vector<RenderPacket*>& visible, const std::vector<RenderPacket*>& objects,
 				const DirectX::BoundingFrustum& frustum, FXMMATRIX view);

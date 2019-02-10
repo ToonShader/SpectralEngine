@@ -183,6 +183,11 @@ void GraphicsCore::SubmitRenderPackets(const std::vector<RenderPacket*>& packets
 	mOpaqueRenderPackets.insert(mOpaqueRenderPackets.end(), packets.begin(), packets.end());
 }
 
+void GraphicsCore::SubmitSceneLights(const std::vector<Light>& lights, int beg, int end)
+{
+	UpdateLightSRV(lights, beg, end - beg);
+}
+
 void GraphicsCore::RenderPrePass()
 {
 	// Temporary implementation for D3D12 initialization verification
@@ -612,76 +617,14 @@ void GraphicsCore::UpdateMainPassCB()
 	DirectX::XMStoreFloat4x4(&mMainPassCB.ViewProj, XMMatrixTranspose(viewProj));
 	DirectX::XMStoreFloat4x4(&mMainPassCB.InvViewProj, XMMatrixTranspose(invViewProj));
 	mMainPassCB.EyePosW = mEyePos;
+	mMainPassCB.NumActiveLights = 10;
 	mMainPassCB.RenderTargetSize = XMFLOAT2((float)mClientWidth, (float)mClientHeight);
 	mMainPassCB.InvRenderTargetSize = XMFLOAT2(1.0f / mClientWidth, 1.0f / mClientHeight);
 	mMainPassCB.NearZ = 1.0f;
 	mMainPassCB.FarZ = 1000.0f;
 	mMainPassCB.TotalTime = 1;// gt.TotalTime(); //TODO: If this stays, need to have time access
 	mMainPassCB.DeltaTime = 1;// gt.DeltaTime();
-
-	//mMainPassCB.AmbientLight = { 0.25f, 0.25f, 0.35f, 1.0f }; // TODO: Reintroduce ambient light
-	////mMainPassCB.Lights[0].Direction = { 0.57735f, -0.57735f, 0.57735f };
-	////mMainPassCB.Lights[0].Strength = { 0.8f, 0.8f, 0.8f };
-	////mMainPassCB.Lights[1].Direction = { -0.57735f, -0.57735f, 0.57735f };
-	////mMainPassCB.Lights[1].Strength = { 0.4f, 0.4f, 0.4f };
-	////mMainPassCB.Lights[2].Direction = { 0.0f, -0.707f, -0.707f };
-	////mMainPassCB.Lights[2].Strength = { 0.2f, 0.2f, 0.2f };
-
-	// mMainPassCB.AmbientLight = { 0.25f, 0.25f, 0.35f, 1.0f };
-	//mMainPassCB.Lights[0].Direction = { 0.57735f, -0.57735f, 0.57735f };
-	//mMainPassCB.Lights[0].Strength = { 0.6f, 0.6f, 0.6f };
-	//mMainPassCB.Lights[1].Direction = { -0.57735f, -0.57735f, 0.57735f };
-	//mMainPassCB.Lights[1].Strength = { 0.3f, 0.3f, 0.3f };
-	//mMainPassCB.Lights[2].Direction = { 0.0f, -0.707f, -0.707f };
-	//mMainPassCB.Lights[2].Strength = { 0.15f, 0.15f, 0.15f };
-
-	mMainPassCB.Lights[0].Position = { 6.57735f, 6.57735f, 6.57735f };
-	mMainPassCB.Lights[0].FalloffEnd = 30;
-	mMainPassCB.Lights[0].Strength = { 1.8f, 1.8f, 1.8f };
-
-	mMainPassCB.Lights[1].Position = { -12.0f, 2.57735f, -12.0f };
-	mMainPassCB.Lights[1].Strength = { 2.0f, 0.5f, 2.0f };
-	mMainPassCB.Lights[1].FalloffEnd = 18;
-
-	mMainPassCB.Lights[2].Position = { 0.0f, 8.0f, 90.0f };
-	mMainPassCB.Lights[2].Strength = { 1.0f, 1.0f, 1.0f };
-	mMainPassCB.Lights[2].FalloffStart = 40;
-	mMainPassCB.Lights[2].FalloffEnd = 60;
-
-	mMainPassCB.Lights[3].Position = { 90.0f, 8.0f, 90.0f };
-	mMainPassCB.Lights[3].Strength = { 1.0f, 1.0f, 1.0f };
-	mMainPassCB.Lights[3].FalloffStart = 40;
-	mMainPassCB.Lights[3].FalloffEnd = 60;
-
-	mMainPassCB.Lights[4].Position = { 90.0f, 8.0f, 0.0f };
-	mMainPassCB.Lights[4].Strength = { 1.0f, 1.0f, 1.0f };
-	mMainPassCB.Lights[4].FalloffStart = 40;
-	mMainPassCB.Lights[4].FalloffEnd = 60;
-
-	mMainPassCB.Lights[5].Position = { 90.0f, 8.0f, -90.0f };
-	mMainPassCB.Lights[5].Strength = { 1.0f, 1.0f, 1.0f };
-	mMainPassCB.Lights[5].FalloffStart = 40;
-	mMainPassCB.Lights[5].FalloffEnd = 60;
-
-	mMainPassCB.Lights[6].Position = { 0.0f, 8.0f, -90.0f };
-	mMainPassCB.Lights[6].Strength = { 1.0f, 1.0f, 1.0f };
-	mMainPassCB.Lights[6].FalloffStart = 40;
-	mMainPassCB.Lights[6].FalloffEnd = 60;
-
-	mMainPassCB.Lights[7].Position = { -90.0f, 8.0f, -90.0f };
-	mMainPassCB.Lights[7].Strength = { 1.0f, 1.0f, 1.0f };
-	mMainPassCB.Lights[7].FalloffStart = 40;
-	mMainPassCB.Lights[7].FalloffEnd = 60;
-
-	mMainPassCB.Lights[8].Position = { -90.0f, 8.0f, 0.0f };
-	mMainPassCB.Lights[8].Strength = { 1.0f, 1.0f, 1.0f };
-	mMainPassCB.Lights[8].FalloffStart = 40;
-	mMainPassCB.Lights[8].FalloffEnd = 60;
-
-	mMainPassCB.Lights[9].Position = { -90.0f, 8.0f, 90.0f };
-	mMainPassCB.Lights[9].Strength = { 1.0f, 1.0f, 1.0f };
-	mMainPassCB.Lights[9].FalloffStart = 40;
-	mMainPassCB.Lights[9].FalloffEnd = 60;
+	// TODO: Add ambient light term
 
 	auto currPassCB = mCurrFrameResource->PassCB.get();
 	currPassCB->CopyData(0, mMainPassCB);
@@ -689,7 +632,16 @@ void GraphicsCore::UpdateMainPassCB()
 	//nvtxRangePop();
 }
 
-void Spectral::Graphics::GraphicsCore::CullObjectsByFrustum(std::vector<RenderPacket*>& visible, const std::vector<RenderPacket*>& objects, const DirectX::BoundingFrustum& frustum, FXMMATRIX view)
+void GraphicsCore::UpdateLightSRV(const std::vector<Light>& lights, int startIndex, int numToUpdate)
+{
+	assert(numToUpdate <= MAX_LIGHTS);
+	auto lightSB = mCurrFrameResource->LightSB.get();
+
+	assert(startIndex + numToUpdate <= lights.size());
+	lightSB->CopyData(0, numToUpdate, lights[startIndex]);
+}
+
+void GraphicsCore::CullObjectsByFrustum(std::vector<RenderPacket*>& visible, const std::vector<RenderPacket*>& objects, const DirectX::BoundingFrustum& frustum, FXMMATRIX view)
 {
 	for (int i = 0; i < objects.size(); ++i)
 	{
@@ -788,11 +740,11 @@ void GraphicsCore::BuildDescriptorHeaps()
 
 
 	// Create the SRV heap for textures.
-	D3D12_DESCRIPTOR_HEAP_DESC srvHeapDesc = {};
-	srvHeapDesc.NumDescriptors = 3 + 3 + 1; // 3 textures + 3 normal maps (will be configurable soon (maybe)) + cube map
-	srvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-	srvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-	ASSERT_HR(md3dDevice->CreateDescriptorHeap(&srvHeapDesc, IID_PPV_ARGS(&mSrvDescriptorHeap)));
+	D3D12_DESCRIPTOR_HEAP_DESC textureHeapDesc = {};
+	textureHeapDesc.NumDescriptors = 3 + 3 + 1; // 3 textures + 3 normal maps (will be configurable soon (maybe)) + cube map
+	textureHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+	textureHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+	ASSERT_HR(md3dDevice->CreateDescriptorHeap(&textureHeapDesc, IID_PPV_ARGS(&mSrvDescriptorHeap)));
 }
 
 void GraphicsCore::BuildConstantBufferViews()
@@ -961,7 +913,7 @@ void GraphicsCore::BuildFrameResources()
 	//for (int i = 0; i < gNumFrameResources; ++i)
 	//{
 		mCurrFrameResource = new FrameResource(md3dDevice.Get(),
-		1, (UINT)NUM_CBUFFERS);
+		1, (UINT)NUM_CBUFFERS, MAX_LIGHTS);
 	//}
 }
 
@@ -969,7 +921,7 @@ void GraphicsCore::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, ID3D12Com
 {
 	//nvtxRangePushW(L"Draw Items");
 
-	UINT objCBByteSize = CalcConstantBufferByteSize(sizeof(ObjectConstants));
+	//UINT objCBByteSize = CalcConstantBufferByteSize(sizeof(ObjectConstants));
 
 	//auto objectCB = mCurrFrameResource->ObjectCB->Resource();
 
@@ -1020,6 +972,7 @@ void GraphicsCore::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, ID3D12Com
 		}
 
 		// Set PSO required to draw the object
+		// TODO: Consolodate
 		auto ri = ritems[i];
 		if (ritems[i]->PSO < NamedPSO::NormalMap) 
 		{ 
@@ -1061,7 +1014,7 @@ void GraphicsCore::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, ID3D12Com
 			}
 		}
 
-		// TODO: This should be refactor to consider that the buffers for the same mesh will be the same.
+		// TODO: This should be refactored to consider that the buffers for the same mesh will be the same.
 		//			- Consider sorting objects by shader used, then by mesh.
 		cmdList->IASetVertexBuffers(0, 1, &ri->Geo->VertexBufferView());
 		cmdList->IASetIndexBuffer(&ri->Geo->IndexBufferView());
@@ -1105,6 +1058,8 @@ void GraphicsCore::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, ID3D12Com
 		//	cmdList->SetGraphicsRootDescriptorTable(3, mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 		cmdList->SetGraphicsRootDescriptorTable(4, tex);
 
+		cmdList->SetGraphicsRootShaderResourceView(5, mCurrFrameResource->LightSB.get()->Resource()->GetGPUVirtualAddress());
+
 		cmdList->DrawIndexedInstanced(ri->IndexCount, 1, ri->StartIndexLocation, ri->BaseVertexLocation, 0);
 	}
 
@@ -1128,22 +1083,24 @@ void GraphicsCore::BuildRootSignature()
 	texTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 2, 0); // texture + normal
 
 	CD3DX12_DESCRIPTOR_RANGE texTable1;
-	texTable1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 1); // sky map stored in space1
+	texTable1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 2); // sky map
 
 	// Root parameter can be a table, root descriptor or root constants.
-	CD3DX12_ROOT_PARAMETER slotRootParameter[5];
+	const int slotCount = 6;
+	CD3DX12_ROOT_PARAMETER slotRootParameter[slotCount];
 
 	// Create root CBVs.
 	slotRootParameter[0].InitAsDescriptorTable(1, &cbvTable0); // PassCB
 	slotRootParameter[1].InitAsDescriptorTable(1, &cbvTable1); // MatCB
 	slotRootParameter[2].InitAsDescriptorTable(1, &cbvTable2); // ObjCB
-	slotRootParameter[3].InitAsDescriptorTable(1, &texTable0, D3D12_SHADER_VISIBILITY_PIXEL); // texture + normal + cubemap
-	slotRootParameter[4].InitAsDescriptorTable(1, &texTable1, D3D12_SHADER_VISIBILITY_PIXEL); // texture + normal + cubemap
+	slotRootParameter[3].InitAsDescriptorTable(1, &texTable0, D3D12_SHADER_VISIBILITY_PIXEL); // texture + normal
+	slotRootParameter[4].InitAsDescriptorTable(1, &texTable1, D3D12_SHADER_VISIBILITY_PIXEL); // cubemap
+	slotRootParameter[5].InitAsShaderResourceView(0, 1, D3D12_SHADER_VISIBILITY_PIXEL); // Light structured buffer
 
 	auto staticSamplers = GetStaticSamplers();
 
 	// A root signature is an array of root parameters.
-	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(5, slotRootParameter, (UINT)staticSamplers.size(), staticSamplers.data(),
+	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(slotCount, slotRootParameter, (UINT)staticSamplers.size(), staticSamplers.data(),
 		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
 	// create a root signature with a single slot which points to a descriptor range consisting of a single constant buffer
@@ -1215,6 +1172,7 @@ Microsoft::WRL::ComPtr<ID3D12Resource> GraphicsCore::CreateDefaultBuffer(
 		D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(byteSize), D3D12_RESOURCE_STATE_COMMON,
 		nullptr, IID_PPV_ARGS(defaultBuffer.GetAddressOf())));
 
+	// TODO: Can be improved by checking if the upload buffer already exists. Alternatively, don't expose it.
 	// In order to copy CPU memory data into our default buffer, we need to create
 	// an intermediate upload heap. 
 	ASSERT_HR(md3dDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),

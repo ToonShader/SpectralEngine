@@ -45,6 +45,75 @@ void SceneManager::Initialize(Spectral::Graphics::GraphicsCore* graphicsCore)
 	//gSceneCamera.SetLens(0.25f * XM_PI, static_cast<float>(width) / height, 1.0f, 1000.0f);
 	mSceneCamera.LookAt(XMFLOAT3(0, 18, -60), XMFLOAT3(0, 18, -59), XMFLOAT3(0.0f, 1.0f, 0.0f));
 	mSceneCamera.UpdateViewMatrix();
+
+	// For now lighting is static, so we will just update and set them here
+	mLights.resize(MAX_LIGHTS);
+
+	//AmbientLight = { 0.25f, 0.25f, 0.35f, 1.0f }; // TODO: Reintroduce ambient light
+	////mLights[0].Direction = { 0.57735f, -0.57735f, 0.57735f };
+	////mLights[0].Strength = { 0.8f, 0.8f, 0.8f };
+	////mLights[1].Direction = { -0.57735f, -0.57735f, 0.57735f };
+	////mLights[1].Strength = { 0.4f, 0.4f, 0.4f };
+	////mLights[2].Direction = { 0.0f, -0.707f, -0.707f };
+	////mLights[2].Strength = { 0.2f, 0.2f, 0.2f };
+
+	// AmbientLight = { 0.25f, 0.25f, 0.35f, 1.0f };
+	//mLights[0].Direction = { 0.57735f, -0.57735f, 0.57735f };
+	//mLights[0].Strength = { 0.6f, 0.6f, 0.6f };
+	//mLights[1].Direction = { -0.57735f, -0.57735f, 0.57735f };
+	//mLights[1].Strength = { 0.3f, 0.3f, 0.3f };
+	//mLights[2].Direction = { 0.0f, -0.707f, -0.707f };
+	//mLights[2].Strength = { 0.15f, 0.15f, 0.15f };
+
+	mLights[0].Position = { 6.57735f, 6.57735f, 6.57735f };
+	mLights[0].FalloffEnd = 30;
+	mLights[0].Strength = { 1.8f, 1.8f, 1.8f };
+
+	mLights[1].Position = { -12.0f, 2.57735f, -12.0f };
+	mLights[1].Strength = { 2.0f, 0.5f, 2.0f };
+	mLights[1].FalloffEnd = 18;
+
+	mLights[2].Position = { 0.0f, 8.0f, 90.0f };
+	mLights[2].Strength = { 1.0f, 1.0f, 1.0f };
+	mLights[2].FalloffStart = 40;
+	mLights[2].FalloffEnd = 60;
+
+	mLights[3].Position = { 90.0f, 8.0f, 90.0f };
+	mLights[3].Strength = { 1.0f, 1.0f, 1.0f };
+	mLights[3].FalloffStart = 40;
+	mLights[3].FalloffEnd = 60;
+
+	mLights[4].Position = { 90.0f, 8.0f, 0.0f };
+	mLights[4].Strength = { 1.0f, 1.0f, 1.0f };
+	mLights[4].FalloffStart = 40;
+	mLights[4].FalloffEnd = 60;
+
+	mLights[5].Position = { 90.0f, 8.0f, -90.0f };
+	mLights[5].Strength = { 1.0f, 1.0f, 1.0f };
+	mLights[5].FalloffStart = 40;
+	mLights[5].FalloffEnd = 60;
+
+	mLights[6].Position = { 0.0f, 8.0f, -90.0f };
+	mLights[6].Strength = { 1.0f, 1.0f, 1.0f };
+	mLights[6].FalloffStart = 40;
+	mLights[6].FalloffEnd = 60;
+
+	mLights[7].Position = { -90.0f, 8.0f, -90.0f };
+	mLights[7].Strength = { 1.0f, 1.0f, 1.0f };
+	mLights[7].FalloffStart = 40;
+	mLights[7].FalloffEnd = 60;
+
+	mLights[8].Position = { -90.0f, 8.0f, 0.0f };
+	mLights[8].Strength = { 1.0f, 1.0f, 1.0f };
+	mLights[8].FalloffStart = 40;
+	mLights[8].FalloffEnd = 60;
+
+	mLights[9].Position = { -90.0f, 8.0f, 90.0f };
+	mLights[9].Strength = { 1.0f, 1.0f, 1.0f };
+	mLights[9].FalloffStart = 40;
+	mLights[9].FalloffEnd = 60;
+
+	mGraphicsCore->SubmitSceneLights(mLights, 0, 10);
 }
 
 void SceneManager::UpdateScene(float dt)

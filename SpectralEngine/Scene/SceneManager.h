@@ -37,6 +37,7 @@ private:
 	std::unordered_map<std::string, std::unique_ptr<Texture>> mTextures;
 	std::unordered_map<std::string, std::unique_ptr<Material>> mMaterials;
 	std::vector<std::unique_ptr<RenderPacket>> mAllRitems;
+	std::vector<Light> mLights;
 
 	Camera mSceneCamera;
 	POINT mLastMousePos;

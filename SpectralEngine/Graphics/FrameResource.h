@@ -63,6 +63,14 @@ public:
 		memcpy(&mMappedData[elementIndex * mElementByteSize], &data, sizeof(T));
 	}
 
+	void CopyData(int elementIndex, int count, const T& data)
+	{
+		// A direct memory copy does not make sense given constant buffer size constraints (currently).
+		// TODO: Fix cbuffer allocation constraints to pad at the end instead of per element.
+		assert(!mIsConstantBuffer);
+		memcpy(&mMappedData[elementIndex * mElementByteSize], &data, mElementByteSize * count);
+	}
+
 private:
 	Microsoft::WRL::ComPtr<ID3D12Resource> mUploadBuffer;
 	BYTE* mMappedData = nullptr;
@@ -89,7 +97,7 @@ struct MaterialConstants
 	DirectX::XMFLOAT4X4 MatTransform = Spectral::Math::XMF4x4Identity();
 };
 
-#define MaxLights 16
+const int MAX_LIGHTS = 16;
 struct PassConstants
 {
 	DirectX::XMFLOAT4X4 View = Spectral::Math::XMF4x4Identity();
@@ -99,15 +107,13 @@ struct PassConstants
 	DirectX::XMFLOAT4X4 ViewProj = Spectral::Math::XMF4x4Identity();
 	DirectX::XMFLOAT4X4 InvViewProj = Spectral::Math::XMF4x4Identity();
 	DirectX::XMFLOAT3 EyePosW = { 0.0f, 0.0f, 0.0f };
-	float cbPerObjectPad1 = 0.0f;
+	float NumActiveLights = 0.0f;
 	DirectX::XMFLOAT2 RenderTargetSize = { 0.0f, 0.0f };
 	DirectX::XMFLOAT2 InvRenderTargetSize = { 0.0f, 0.0f };
 	float NearZ = 0.0f;
 	float FarZ = 0.0f;
 	float TotalTime = 0.0f;
 	float DeltaTime = 0.0f;
-
-	Light Lights[MaxLights];
 };
 
 struct Vertex
@@ -123,7 +129,7 @@ struct FrameResource
 {
 public:
 
-	FrameResource(ID3D12Device* device, UINT passCount, UINT objectCount);
+	FrameResource(ID3D12Device* device, UINT passCount, UINT objectCount, UINT lightCount);
 	FrameResource(const FrameResource& rhs) = delete;
 	FrameResource& operator=(const FrameResource& rhs) = delete;
 	~FrameResource();
@@ -133,6 +139,7 @@ public:
 	std::unique_ptr<UploadBuffer<PassConstants>> PassCB = nullptr;
 	std::unique_ptr<UploadBuffer<MaterialConstants>> MaterialCB = nullptr;
 	std::unique_ptr<UploadBuffer<ObjectConstants>> ObjectCB = nullptr;
+	std::unique_ptr<UploadBuffer<Light>> LightSB = nullptr; // TODO: Move elsewhere?
 
 	UINT64 Fence = 0;
 };

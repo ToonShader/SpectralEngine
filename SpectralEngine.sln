@@ -13,20 +13,16 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Editor", "Editor", "{318D49
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
-		Debug|ARM = Debug|ARM
 		Debug|x64 = Debug|x64
 		Debug|x86 = Debug|x86
-		Release|ARM = Release|ARM
 		Release|x64 = Release|x64
 		Release|x86 = Release|x86
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{F74C5BF5-1079-454E-93FF-EE798FB5A65F}.Debug|ARM.ActiveCfg = Debug|Win32
 		{F74C5BF5-1079-454E-93FF-EE798FB5A65F}.Debug|x64.ActiveCfg = Debug|x64
 		{F74C5BF5-1079-454E-93FF-EE798FB5A65F}.Debug|x64.Build.0 = Debug|x64
 		{F74C5BF5-1079-454E-93FF-EE798FB5A65F}.Debug|x86.ActiveCfg = Debug|Win32
 		{F74C5BF5-1079-454E-93FF-EE798FB5A65F}.Debug|x86.Build.0 = Debug|Win32
-		{F74C5BF5-1079-454E-93FF-EE798FB5A65F}.Release|ARM.ActiveCfg = Release|Win32
 		{F74C5BF5-1079-454E-93FF-EE798FB5A65F}.Release|x64.ActiveCfg = Release|x64
 		{F74C5BF5-1079-454E-93FF-EE798FB5A65F}.Release|x64.Build.0 = Release|x64
 		{F74C5BF5-1079-454E-93FF-EE798FB5A65F}.Release|x86.ActiveCfg = Release|Win32
