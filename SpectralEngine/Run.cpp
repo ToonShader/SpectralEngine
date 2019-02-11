@@ -23,7 +23,7 @@
 #endif
 
 // Simple toggle for benchmarking
-//#define BENCHMARK
+const bool gBenchmarking = false;
 
 #pragma comment(lib, "dxguid.lib")
 //#pragma comment(lib, "dxgidebug.lib")
@@ -33,7 +33,7 @@ std::unique_ptr<WindowManager> gWindow;
 
 void CalculateFrameStats(Timer& timer, HWND hWnd);
 
-SceneManager gSceneManager;
+SceneManager gSceneManager(gBenchmarking);
 
 void OnMouseDown(WPARAM btnState, int x, int y);
 void OnMouseUp(WPARAM btnState, int x, int y);
@@ -215,15 +215,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE prevInstance,
 		gGraphicsCore = Spectral::Graphics::GraphicsCore::GetGraphicsCoreInstance(gWindow->getHandle());
 		gSceneManager.Initialize(gGraphicsCore);
 		gSceneManager.Resize(800, 600);
-
-		#ifdef BENCHMARK
-		gGraphicsCore->SetFullScreen(true);
-		float theta = 1.5f*XM_PI;
-		float phi = 0.40f*XM_PI;
-		float radius = 60.0f;
-		#endif
-
-
+		if (gBenchmarking)
+		{
+			// This will trigger a WM_RESIZE, so only need to change this.
+			gGraphicsCore->SetFullScreen(true);
+		}
 
 		Timer timer;
 		timer.Reset();
@@ -240,27 +236,17 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE prevInstance,
 				DispatchMessage(&msg);
 			}
 
-			#ifdef BENCHMARK
-			if (timer.TotalTime() > 20000.0f)
+			// Terminate after 20 seconds
+			if (gBenchmarking && timer.TotalTime() > 20000.0f)
 				break;
-
-			// Convert Spherical to Cartesian coordinates.
-			theta += timer.DeltaTime() * 0.0005f;
-			float x = radius * sinf(phi)*cosf(theta);
-			float z = radius * sinf(phi)*sinf(theta);
-			float y = radius * cosf(phi);
-			gSceneCamera.LookAt(XMFLOAT3(x, y, z), XMFLOAT3(0.0f, 0.0f, 0.0f), XMFLOAT3(0.0f, 1.0f, 0.0f));
-			#endif
-
 			
 			gSceneManager.UpdateScene(timer.DeltaTime());
 			gSceneManager.DrawScene();
 
 			timer.Tick();
 
-			#ifndef BENCHMARK
-			CalculateFrameStats(timer, gWindow->getHandle());
-			#endif
+			if (!gBenchmarking)
+				CalculateFrameStats(timer, gWindow->getHandle());
 
 			++numFrames;
 		}

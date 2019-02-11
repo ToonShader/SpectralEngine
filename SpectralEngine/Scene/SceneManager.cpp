@@ -24,7 +24,8 @@
 
 
 
-SceneManager::SceneManager()
+SceneManager::SceneManager(bool benchmarking)
+	: mBenchmarking(benchmarking)
 {
 }
 
@@ -118,6 +119,20 @@ void SceneManager::Initialize(Spectral::Graphics::GraphicsCore* graphicsCore)
 
 void SceneManager::UpdateScene(float dt)
 {
+	if (mBenchmarking)
+	{
+		// Convert Spherical to Cartesian coordinates.
+		static float theta = 1.5f*XM_PI; 
+		const float phi = 0.40f*XM_PI;
+		const float radius = 60.0f;
+
+		theta += dt * 0.0005f;
+		float x = radius * sinf(phi)*cosf(theta);
+		float z = radius * sinf(phi)*sinf(theta);
+		float y = radius * cosf(phi);
+		mSceneCamera.LookAt(XMFLOAT3(x, y, z), XMFLOAT3(0.0f, 0.0f, 0.0f), XMFLOAT3(0.0f, 1.0f, 0.0f));
+	}
+
 	mSceneCamera.UpdateViewMatrix();
 
 	if (mEditing && mActiveObject)

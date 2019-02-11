@@ -7,7 +7,7 @@
 class SceneManager
 {
 public:
-	SceneManager();
+	SceneManager(bool benchmarking);
 	~SceneManager();
 
 	void Initialize(Spectral::Graphics::GraphicsCore* graphicsCore);
@@ -43,10 +43,12 @@ private:
 	POINT mLastMousePos;
 	POINT mLastMouseDownPos;
 	float mRotateX;
+
 	// Temporary until I drag the window into this class
 	int mClientWidth = 800;
 	int mClientHeight = 600;
 
+	bool mBenchmarking = false;
 
 	bool mEditing = false;
 	RenderPacket* mActiveObject = nullptr;
