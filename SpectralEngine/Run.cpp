@@ -1,4 +1,3 @@
-//#define RELEASE // (Temporary) Secondary toggle for benchmarking
 #include "Common\Timer.h"
 #include "Common\WindowManager.h"
 #include "Graphics\GraphicsCore.h"

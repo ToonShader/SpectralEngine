@@ -32,7 +32,8 @@ bool WindowManager::InitWindow(int width, int height, WNDPROC wndProc)
 	wcex.lpszMenuName = nullptr;
 	wcex.lpszClassName = mWindowCaption.c_str();
 	wcex.hIconSm = LoadIcon(mhAppInstance, IDI_APPLICATION);
-	assert(RegisterClassEx(&wcex) != 0);
+	auto retVal = RegisterClassEx(&wcex);
+	assert(retVal != 0);
 
 	// Create window
 	RECT rect = { 0, 0, mWindowWidth, mWindowHeight };

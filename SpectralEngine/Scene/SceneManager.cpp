@@ -1,5 +1,3 @@
-#define RELEASE
-
 #include "SceneManager.h"
 #include "Asset_Conditioning/ObjectConditioner.h"
 #include "Common\Utility.h"
