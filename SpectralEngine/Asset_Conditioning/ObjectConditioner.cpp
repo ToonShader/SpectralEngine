@@ -29,7 +29,7 @@ void ObjectConditioner::LoadObjectsFromFiles(const std::vector<std::string>& fil
 	// to end up with a bunch of draw calls for a small amount of triangles each.
 	std::vector<std::vector<GeometryGenerator::MeshData>> meshes(filenames.size() + 1);
 	LoadPrimitiveGeometry(meshes[0]); //TODO: Remember these are returned as submeshes
-	for (int i = 0; i < filenames.size(); ++i)
+	for (size_t i = 0; i < filenames.size(); ++i)
 	{
 		// TODO: Error handling for when a mesh fails to load
 		LoadObjectFromFile(filenames[i], meshes[i + 1]);
@@ -40,12 +40,12 @@ void ObjectConditioner::LoadObjectsFromFiles(const std::vector<std::string>& fil
 	// So define the regions in the buffers each submesh covers.
 	//
 	const GeometryGenerator::MeshData* lastMesh = nullptr;
-	int totalVertexCount = 0;
+	size_t totalVertexCount = 0;
 	//int totalIndexCount = 0;
-	for (int i = 0; i < meshes.size(); ++i)
+	for (size_t i = 0; i < meshes.size(); ++i)
 	{
 		SubMesh combinedMesh;
-		for (int j = 0; j < meshes[i].size(); ++j)
+		for (size_t j = 0; j < meshes[i].size(); ++j)
 		{
 			SubMesh off;
 			off.Name = meshes[i][j].Name;
@@ -93,12 +93,12 @@ void ObjectConditioner::LoadObjectsFromFiles(const std::vector<std::string>& fil
 
 	// TODO: These loops can be combined
 	vertices.resize(totalVertexCount);
-	UINT k = 0;
-	for (int i = 0; i < meshes.size(); ++i)
+	size_t k = 0;
+	for (size_t i = 0; i < meshes.size(); ++i)
 	{
-		for (int j = 0; j < meshes[i].size(); ++j)
+		for (size_t j = 0; j < meshes[i].size(); ++j)
 		{
-			for (int v = 0; v < meshes[i][j].Vertices.size(); ++v, ++k)
+			for (size_t v = 0; v < meshes[i][j].Vertices.size(); ++v, ++k)
 			{
 				vertices[k].Position = meshes[i][j].Vertices[v].Position;
 				vertices[k].Normal = meshes[i][j].Vertices[v].Normal;
@@ -109,13 +109,13 @@ void ObjectConditioner::LoadObjectsFromFiles(const std::vector<std::string>& fil
 	}
 
 	k = 0;
-	for (int i = 0; i < meshes.size(); ++i)
+	for (size_t i = 0; i < meshes.size(); ++i)
 	{
-		for (int j = 0; j < meshes[i].size(); ++j, ++k)
+		for (size_t j = 0; j < meshes[i].size(); ++j, ++k)
 		{
 			indices.insert(indices.end(), meshes[i][j].GetIndices16().begin(), meshes[i][j].GetIndices16().end());
 			int indexOffset = subMeshes[k].BaseVertexLocation - subMeshes[k - j].BaseVertexLocation;
-			for (int v = subMeshes[k].StartIndexLocation; v < subMeshes[k].StartIndexLocation + subMeshes[k].IndexCount; ++v)
+			for (UINT v = subMeshes[k].StartIndexLocation; v < subMeshes[k].StartIndexLocation + subMeshes[k].IndexCount; ++v)
 			{
 				indices[v] += indexOffset;
 			}
@@ -162,14 +162,14 @@ bool ObjectConditioner::LoadObjectFromFile(const std::string& filename, std::vec
 
 	// TODO: Add handling for duplicate vertices to reduce vertex buffer size
 	meshes.resize(shapes.size());
-	for (int i = 0; i < shapes.size(); ++i)
+	for (size_t i = 0; i < shapes.size(); ++i)
 	{
 		GeometryGenerator::MeshData submesh;
 		submesh.Vertices.resize(shapes[i].mesh.indices.size());
 		submesh.Indices32.resize(shapes[i].mesh.indices.size());
 
-		int counter = 0;
-		for (int j = 0; j < shapes[i].mesh.indices.size(); ++j)
+		UINT counter = 0;
+		for (size_t j = 0; j < shapes[i].mesh.indices.size(); ++j)
 		{
 			submesh.Indices32[j] = counter;
 			++counter;
@@ -188,6 +188,8 @@ bool ObjectConditioner::LoadObjectFromFile(const std::string& filename, std::vec
 		submesh.Name = shapes[i].name;
 		meshes[i] = submesh;
 	}
+
+	return true;
 }
 
 void ObjectConditioner::CalculateTangentUVectors(GeometryGenerator::Vertex* vertices, long vertexCount, long triangleCount, const unsigned int* indicies) const

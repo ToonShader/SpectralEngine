@@ -187,7 +187,7 @@ void SceneManager::BuildShapeGeometry()
 	geo->IndexFormat = DXGI_FORMAT_R16_UINT;
 	geo->IndexBufferByteSize = ibByteSize;
 
-	for (int i = 0; i < meshes.size(); ++i)
+	for (size_t i = 0; i < meshes.size(); ++i)
 		geo->DrawArgs[meshes[i].Name] = meshes[i];
 
 	mGeometries[geo->Name] = std::move(geo);
@@ -548,7 +548,7 @@ void SceneManager::AddObject(const std::string& object, const std::string& mater
 {
 	// TODO: Add support for multiple geometry buffers
 	auto extents = mGeometries["shapeGeo"]->DrawArgs[object].Bounds.Extents;
-	XMVECTOR factor = XMVectorReplicate(2.5 * max(max(extents.x, extents.y), extents.z));
+	XMVECTOR factor = XMVectorReplicate(2.5f * max(max(extents.x, extents.y), extents.z));
 	XMVECTOR cameraPos = mSceneCamera.GetPosition();
 	XMVECTOR look = mSceneCamera.GetLook();
 	XMFLOAT3 objPos;
@@ -669,7 +669,7 @@ void SceneManager::OnMouseUp(WPARAM btnState, int sx, int sy)
 			XMVECTOR rayOrigin = XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f);
 			XMVECTOR rayDir = XMVector3Normalize(XMVectorSet(vx, vy, 1.0f, 0.0f));
 			float minDistance = D3D12_FLOAT32_MAX;
-			for (int i = 0; i < mAllRitems.size(); ++i)
+			for (size_t i = 0; i < mAllRitems.size(); ++i)
 			{
 				// TODO: Switch to picking in world space?
 				// Perform containment check in view space

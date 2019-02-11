@@ -336,7 +336,6 @@ void GraphicsCore::testrender(const Camera& camera)
 	//nvtxRangePop();
 }
 
-#define D3DCOMPILE_DEBUG 1
 bool GraphicsCore::InitDirect3D()
 {
 	UINT dxgiFactoryFlags = 0;
@@ -538,9 +537,8 @@ void GraphicsCore::UpdateObjectCBs(const std::vector<RenderPacket*>& packets, in
 
 	assert(numToUpdate <= NUM_CBUFFERS);
 	auto currObjectCB = mCurrFrameResource->ObjectCB.get();
-
-	int endIndex = startIndex + numToUpdate < packets.size() ? startIndex + numToUpdate : packets.size();
-	for (int i = startIndex, cbIndex = 0; i < endIndex; ++i, ++cbIndex)
+	size_t endIndex = size_t(startIndex) + numToUpdate < packets.size() ? startIndex + numToUpdate : packets.size();
+	for (size_t i = startIndex, cbIndex = 0; i < endIndex; ++i, ++cbIndex)
 	{
 		// For pre-rendered frames, uncomment the below...
 		// Only update the cbuffer data if the constants have changed.  
@@ -572,8 +570,8 @@ void GraphicsCore::UpdateMaterialCBs(const std::vector<RenderPacket*>& packets, 
 	auto currMaterialCB = mCurrFrameResource->MaterialCB.get();
 
 	// TODO: Insert checks/parameters for number of descriptors held by a CB.
-	int endIndex = startIndex + numToUpdate < packets.size() ? startIndex + numToUpdate : packets.size();
-	for (int i = startIndex, cbIndex = 0; i < endIndex; ++i, ++cbIndex)
+	size_t endIndex = size_t(startIndex) + numToUpdate < packets.size() ? startIndex + numToUpdate : packets.size();
+	for (size_t i = startIndex, cbIndex = 0; i < endIndex; ++i, ++cbIndex)
 	{
 		const Material* mat = packets[i]->Mat;
 		//if (mat->NumFramesDirty > 0)
@@ -637,13 +635,13 @@ void GraphicsCore::UpdateLightSRV(const std::vector<Light>& lights, int startInd
 	assert(numToUpdate <= MAX_LIGHTS);
 	auto lightSB = mCurrFrameResource->LightSB.get();
 
-	assert(startIndex + numToUpdate <= lights.size());
+	assert(UINT64(startIndex) + numToUpdate <= lights.size());
 	lightSB->CopyData(0, numToUpdate, lights[startIndex]);
 }
 
 void GraphicsCore::CullObjectsByFrustum(std::vector<RenderPacket*>& visible, const std::vector<RenderPacket*>& objects, const DirectX::BoundingFrustum& frustum, FXMMATRIX view)
 {
-	for (int i = 0; i < objects.size(); ++i)
+	for (size_t i = 0; i < objects.size(); ++i)
 	{
 		// Perform containment check in view space
 		XMMATRIX world = XMLoadFloat4x4(&objects[i]->World);
@@ -1157,7 +1155,7 @@ Microsoft::WRL::ComPtr<ID3D12Resource> GraphicsCore::CreateDefaultBuffer(
 	//ID3D12Device* device,
 	//ID3D12GraphicsCommandList* cmdList,
 	const void* initData,
-	UINT64 byteSize,
+	INT64 byteSize,
 	Microsoft::WRL::ComPtr<ID3D12Resource>& uploadBuffer)
 {
 	// Temporary solution until multiple command lists,
@@ -1183,7 +1181,7 @@ Microsoft::WRL::ComPtr<ID3D12Resource> GraphicsCore::CreateDefaultBuffer(
 	// Describe the data we want to copy into the default buffer.
 	D3D12_SUBRESOURCE_DATA subResourceData = {};
 	subResourceData.pData = initData;
-	subResourceData.RowPitch = byteSize;
+	subResourceData.RowPitch = static_cast<LONG_PTR>(byteSize);
 	subResourceData.SlicePitch = subResourceData.RowPitch;
 
 	// Schedule to copy the data to the default buffer resource.  At a high level, the helper function UpdateSubresources
@@ -1214,7 +1212,7 @@ void GraphicsCore::LoadTextures(std::vector<Texture*>& texes)
 {
 	ASSERT_HR(mCommandList->Reset(mDirectCmdListAlloc.Get(), nullptr));
 
-	for (int i = 0; i < texes.size(); ++i)
+	for (size_t i = 0; i < texes.size(); ++i)
 	{
 		ASSERT_HR(DirectX::CreateDDSTextureFromFile12(md3dDevice.Get(),
 			mCommandList.Get(), texes[i]->Filename.c_str(),
@@ -1243,7 +1241,7 @@ void GraphicsCore::SubmitSceneTextures(std::vector<Texture*>& texes, std::vector
 	// Fill out the heap with actual descriptors.
 	CD3DX12_CPU_DESCRIPTOR_HANDLE handle(mSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
 
-	for (int i = 0; i < texes.size(); ++i)
+	for (short i = 0; i < static_cast<short>(texes.size()); ++i)
 	{
 		auto texResource = texes[i]->Resource;
 		viewIndicies.push_back(i);
@@ -1283,7 +1281,7 @@ void GraphicsCore::SubmitSceneTextures(std::vector<Texture*>& texes, std::vector
 	// Need to also consider using lists with separate uses to maximize GPU throughput.
 
 	// TODO: Move this as it does not make sense to perform here.
-	for (int i = 0; i < texes.size(); ++i)
+	for (size_t i = 0; i < texes.size(); ++i)
 		texes[i]->UploadHeap = nullptr;
 }
 

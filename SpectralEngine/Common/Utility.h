@@ -29,7 +29,7 @@ if (FAILED(hr))						\
 
 #else
 #define ASSERT(exp, outstr) (exp)
-#define ASSERT_HR(hr, outstr) (hr)
+#define ASSERT_HR(hr) (hr)
 
 #endif // RELEASE
 

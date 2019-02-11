@@ -285,7 +285,7 @@ void CalculateFrameStats(Timer& timer, HWND hWnd)
 	// Compute averages over one second period.
 	if (delta >= 1000.0f)
 	{
-		float fps = (float)frameCnt / (delta / 1000.0);
+		float fps = (float)frameCnt / (delta / 1000.0f);
 		float mspf = 1000.0f / fps;
 
 		std::wstring fpsStr = std::to_wstring(fps);
