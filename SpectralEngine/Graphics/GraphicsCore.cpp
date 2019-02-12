@@ -968,44 +968,13 @@ void GraphicsCore::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, ID3D12Com
 		// Set PSO required to draw the object
 		// TODO: Consolodate
 		auto ri = ritems[i];
-		if (ritems[i]->PSO < NamedPSO::NormalMap) 
-		{ 
-			if (mIsWireframe && activePSO != NamedPSO::Default_WF)
-			{
-				activePSO = NamedPSO::Default_WF;
-				cmdList->SetPipelineState(mPSOs[activePSO].Get());
-			}
-			else if (activePSO != NamedPSO::Default)
-			{
-				activePSO = NamedPSO::Default;
-				cmdList->SetPipelineState(mPSOs[activePSO].Get());
-			}
-		}
-		else if (ritems[i]->PSO < NamedPSO::SkyMap)
+		NamedPSO targetPSO = ri->PSO;
+		if (mIsWireframe)
+			targetPSO = static_cast<NamedPSO>(static_cast<int>(targetPSO) + 1);
+		if (targetPSO != activePSO)
 		{
-			if (mIsWireframe && activePSO != NamedPSO::NormalMap_WF)
-			{
-				activePSO = NamedPSO::NormalMap_WF;
-				cmdList->SetPipelineState(mPSOs[activePSO].Get());
-			}
-			else if (activePSO != NamedPSO::NormalMap)
-			{
-				activePSO = NamedPSO::NormalMap;
-				cmdList->SetPipelineState(mPSOs[activePSO].Get());
-			}
-		}
-		else
-		{
-			if (mIsWireframe && activePSO != NamedPSO::SkyMap_WF)
-			{
-				activePSO = NamedPSO::SkyMap_WF;
-				cmdList->SetPipelineState(mPSOs[activePSO].Get());
-			}
-			else if (activePSO != NamedPSO::SkyMap)
-			{
-				activePSO = NamedPSO::SkyMap;
-				cmdList->SetPipelineState(mPSOs[activePSO].Get());
-			}
+			activePSO = targetPSO;
+			cmdList->SetPipelineState(mPSOs[activePSO].Get());
 		}
 
 		// TODO: This should be refactored to consider that the buffers for the same mesh will be the same.
