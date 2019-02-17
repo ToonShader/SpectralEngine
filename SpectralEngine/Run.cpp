@@ -255,7 +255,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE prevInstance,
 		file << numFrames;
 		file.close();
 	}
-	
+
+	gSceneManager.Destroy();
 	Spectral::Graphics::GraphicsCore::DestroyGraphicsCoreInstance();
 
 #ifndef RELEASE

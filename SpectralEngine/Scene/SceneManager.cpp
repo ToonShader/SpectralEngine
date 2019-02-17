@@ -112,7 +112,22 @@ void SceneManager::Initialize(Spectral::Graphics::GraphicsCore* graphicsCore)
 	mLights[9].FalloffStart = 40;
 	mLights[9].FalloffEnd = 60;
 
-	mGraphicsCore->SubmitSceneLights(mLights, 0, 10);
+	// Auto generate light positions based on desired count
+	// (Used for benchmarking lighting system)
+	//int lightsPerSide = 4;
+	//mLights.resize(lightsPerSide * lightsPerSide);
+	//float spacing = 240.0f / (lightsPerSide - 1);
+	//for (size_t i = 0; i < mLights.size(); ++i)
+	//{
+	//	int x = i % (lightsPerSide);
+	//	int z = i / (lightsPerSide);
+	//	mLights[i].Position = { (x * spacing) - 120.0f, 1.0f, (z * spacing) - 120.0f };
+	//	XMStoreFloat3(&mLights[i].Strength, XMVector3Normalize(XMVectorAbs(XMLoadFloat3(&mLights[i].Position)))); //{ 1.0f, 1.0f, 1.0f };
+	//	mLights[i].FalloffStart = 20;
+	//	mLights[i].FalloffEnd = 30;
+	//}
+
+	mGraphicsCore->SubmitSceneLights(mLights, 0, mLights.size());
 }
 
 void SceneManager::UpdateScene(float dt)
@@ -150,6 +165,19 @@ void SceneManager::UpdateScene(float dt)
 void SceneManager::DrawScene()
 {
 	mGraphicsCore->testrender(mSceneCamera);
+}
+
+void SceneManager::Destroy()
+{
+	mGraphicsCore = nullptr;
+	mGeometries.clear();
+	mTextures.clear();
+	mMaterials.clear();
+	mAllRitems.clear();
+	mLights.clear();
+	mObjectFiles.clear();
+	mActiveObject = nullptr;
+	mEditingAxis[0] = mEditingAxis[1] = mEditingAxis[2] = nullptr;
 }
 
 void SceneManager::BuildShapeGeometry()
@@ -294,17 +322,9 @@ void SceneManager::BuildRenderItems()
 		leftCylRitem->BaseVertexLocation = leftCylRitem->Geo->DrawArgs["cylinder"].BaseVertexLocation;
 		leftCylRitem->Bounds = leftCylRitem->Geo->DrawArgs["cylinder"].Bounds;
 
+		*rightCylRitem = *leftCylRitem;
 		XMStoreFloat4x4(&rightCylRitem->World, leftCylWorld);
 		XMStoreFloat4x4(&rightCylRitem->TexTransform, brickTexTransform);
-		//rightCylRitem->ObjCBIndex = objCBIndex++;
-		rightCylRitem->Mat = mMaterials["bricks0"].get();
-		rightCylRitem->Geo = mGeometries["shapeGeo"].get();
-		rightCylRitem->PSO = NamedPSO::NormalMap;
-		rightCylRitem->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
-		rightCylRitem->IndexCount = rightCylRitem->Geo->DrawArgs["cylinder"].IndexCount;
-		rightCylRitem->StartIndexLocation = rightCylRitem->Geo->DrawArgs["cylinder"].StartIndexLocation;
-		rightCylRitem->BaseVertexLocation = rightCylRitem->Geo->DrawArgs["cylinder"].BaseVertexLocation;
-		rightCylRitem->Bounds = rightCylRitem->Geo->DrawArgs["cylinder"].Bounds;
 
 		XMStoreFloat4x4(&leftSphereRitem->World, leftSphereWorld);
 		leftSphereRitem->TexTransform = Spectral::Math::XMF4x4Identity();
@@ -318,17 +338,9 @@ void SceneManager::BuildRenderItems()
 		leftSphereRitem->BaseVertexLocation = leftSphereRitem->Geo->DrawArgs["sphere"].BaseVertexLocation;
 		leftSphereRitem->Bounds = leftSphereRitem->Geo->DrawArgs["sphere"].Bounds;
 
+		*rightSphereRitem = *leftSphereRitem;
 		XMStoreFloat4x4(&rightSphereRitem->World, rightSphereWorld);
 		rightSphereRitem->TexTransform = Spectral::Math::XMF4x4Identity();
-		//rightSphereRitem->ObjCBIndex = objCBIndex++;
-		rightSphereRitem->Mat = mMaterials["stone0"].get();
-		rightSphereRitem->Geo = mGeometries["shapeGeo"].get();
-		rightSphereRitem->PSO = NamedPSO::Default;
-		rightSphereRitem->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
-		rightSphereRitem->IndexCount = rightSphereRitem->Geo->DrawArgs["sphere"].IndexCount;
-		rightSphereRitem->StartIndexLocation = rightSphereRitem->Geo->DrawArgs["sphere"].StartIndexLocation;
-		rightSphereRitem->BaseVertexLocation = rightSphereRitem->Geo->DrawArgs["sphere"].BaseVertexLocation;
-		rightSphereRitem->Bounds = rightSphereRitem->Geo->DrawArgs["sphere"].Bounds;
 
 		mAllRitems.push_back(std::move(leftCylRitem));
 		mAllRitems.push_back(std::move(rightCylRitem));

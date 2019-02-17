@@ -13,6 +13,7 @@ public:
 	void Initialize(Spectral::Graphics::GraphicsCore* graphicsCore);
 	void UpdateScene(float dt);
 	void DrawScene();
+	void Destroy();
 
 	void Resize(int width, int height);
 
