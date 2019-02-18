@@ -256,8 +256,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE prevInstance,
 		file.close();
 	}
 
-	gSceneManager.Destroy();
 	Spectral::Graphics::GraphicsCore::DestroyGraphicsCoreInstance();
+	gSceneManager.Destroy();
 
 #ifndef RELEASE
 	IDXGIDebug1* pDebug = nullptr;
