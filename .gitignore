@@ -263,3 +263,9 @@ __pycache__/
 # Profiling and Debugging Snapshots
 /Captures
 /Reports
+
+
+## Spectral Specific Ignores
+
+# Generated Runtime Files
+fpsStats.txt
