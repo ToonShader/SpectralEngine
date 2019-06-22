@@ -15,6 +15,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <deque>
 #include <array>
 
 // TODO: Factor CB system into central CB class which manages the indicies into the buffer memory instead of the structures.
@@ -23,6 +24,7 @@
 #include "Mesh.h"
 #include "RenderPacket.h"
 #include "FrameResource.h"
+#include "DepthStencilBuffer.h"
 #include "Common/Camera.h"
 
 extern const int gNumFrameResources;
@@ -56,6 +58,7 @@ namespace Spectral
 			/*virtual*/ void RenderPrePass(/*const Timer& gt*/); /*= 0;*/
 			/*virtual*/ void Render(/*const Timer& gt*/); /*= 0;*/
 			void testrender(const Camera& camera);
+			void RenderShadowMaps();
 			// TODO: Accessors for settings screen states
 
 			Microsoft::WRL::ComPtr<ID3D12Resource> CreateDefaultBuffer(/*ID3D12Device* device, ID3D12GraphicsCommandList* cmdList,*/
@@ -95,18 +98,19 @@ namespace Spectral
 			void BuildPSOs();
 			void BuildFrameResources();
 			FrameResource* mCurrFrameResource = nullptr;
-			void DrawRenderItems(ID3D12GraphicsCommandList* cmdList, ID3D12CommandAllocator* listAlloc, const std::vector<RenderPacket*>& ritems);
+			void DrawRenderItems(ID3D12GraphicsCommandList* cmdList, ID3D12CommandAllocator* listAlloc, const std::vector<RenderPacket*>& ritems, bool isShadowMap = false);
 
 			void UpdateMainPassCB();
 			void UpdateObjectCBs(const std::vector<RenderPacket*>& packets, int startIndex, int numToUpdate);
 			void UpdateMaterialCBs(const std::vector<RenderPacket*>& packets, int startIndex, int numToUpdate);
+			void UpdateShadowPassCB(const DepthStencilBuffer::ShadowMap& map); // TODO: Move
 			void UpdateLightSRV(const std::vector<Light>& lights, int startIndex, int numToUpdate);
 
 			void CullObjectsByFrustum(std::vector<RenderPacket*>& visible, const std::vector<RenderPacket*>& objects,
 				const DirectX::BoundingFrustum& frustum, FXMMATRIX view);
 
 			// Temporary
-			std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> GetStaticSamplers();
+			std::array<const CD3DX12_STATIC_SAMPLER_DESC, 7> GetStaticSamplers();
 
 
 
@@ -161,14 +165,18 @@ namespace Spectral
 
 			std::vector<D3D12_INPUT_ELEMENT_DESC> mInputLayout;
 
-			std::vector<RenderPacket*> mAllRenderPackets;
+			std::vector<RenderPacket*> mAllRenderPackets; // TODO: Convert to render layer
 
 			// Render packets will eventually be separated by required PSO and other attributes
 			std::vector<RenderPacket*> mOpaqueRenderPackets;
 
 			PassConstants mMainPassCB;
+			PassConstants mShadowPassCB;
 
 			UINT mPassCbvOffset = 0;
+
+			std::vector<Light> mLights;
+			std::deque<DepthStencilBuffer::ShadowMap> mShadowMaps;
 
 			bool mIsWireframe = false;
 

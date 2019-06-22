@@ -106,6 +106,7 @@ struct PassConstants
 	DirectX::XMFLOAT4X4 InvProj = Spectral::Math::XMF4x4Identity();
 	DirectX::XMFLOAT4X4 ViewProj = Spectral::Math::XMF4x4Identity();
 	DirectX::XMFLOAT4X4 InvViewProj = Spectral::Math::XMF4x4Identity();
+	DirectX::XMFLOAT4X4 ShadowTransform = Spectral::Math::XMF4x4Identity();
 	DirectX::XMFLOAT3 EyePosW = { 0.0f, 0.0f, 0.0f };
 	float NumActiveLights = 0.0f;
 	DirectX::XMFLOAT2 RenderTargetSize = { 0.0f, 0.0f };

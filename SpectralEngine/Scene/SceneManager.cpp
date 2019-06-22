@@ -57,60 +57,60 @@ void SceneManager::Initialize(Spectral::Graphics::GraphicsCore* graphicsCore)
 	////mLights[2].Strength = { 0.2f, 0.2f, 0.2f };
 
 	// AmbientLight = { 0.25f, 0.25f, 0.35f, 1.0f };
-	//mLights[0].Direction = { 0.57735f, -0.57735f, 0.57735f };
-	//mLights[0].Strength = { 0.6f, 0.6f, 0.6f };
+	XMStoreFloat3(&mLights[0].Direction, XMVector3Normalize({ 10.57735f, -15.57735f, 7.57735f })); //{ 0.57735f, -0.57735f, 0.57735f };
+	mLights[0].Strength = { 1.0f, 1.0f, 1.0f };
 	//mLights[1].Direction = { -0.57735f, -0.57735f, 0.57735f };
 	//mLights[1].Strength = { 0.3f, 0.3f, 0.3f };
 	//mLights[2].Direction = { 0.0f, -0.707f, -0.707f };
 	//mLights[2].Strength = { 0.15f, 0.15f, 0.15f };
 
-	mLights[0].Position = { 6.57735f, 6.57735f, 6.57735f };
-	mLights[0].FalloffEnd = 30;
-	mLights[0].Strength = { 1.8f, 1.8f, 1.8f };
+	//mLights[0].Position = { 6.57735f, 6.57735f, 6.57735f };
+	//mLights[0].FalloffEnd = 30;
+	//mLights[0].Strength = { 1.8f, 1.8f, 1.8f };
 
-	mLights[1].Position = { -12.0f, 2.57735f, -12.0f };
-	mLights[1].Strength = { 2.0f, 0.5f, 2.0f };
-	mLights[1].FalloffEnd = 18;
+	//mLights[1].Position = { -12.0f, 2.57735f, -12.0f };
+	//mLights[1].Strength = { 2.0f, 0.5f, 2.0f };
+	//mLights[1].FalloffEnd = 18;
 
-	mLights[2].Position = { 0.0f, 8.0f, 90.0f };
-	mLights[2].Strength = { 1.0f, 1.0f, 1.0f };
-	mLights[2].FalloffStart = 40;
-	mLights[2].FalloffEnd = 60;
+	//mLights[2].Position = { 0.0f, 8.0f, 90.0f };
+	//mLights[2].Strength = { 1.0f, 1.0f, 1.0f };
+	//mLights[2].FalloffStart = 40;
+	//mLights[2].FalloffEnd = 60;
 
-	mLights[3].Position = { 90.0f, 8.0f, 90.0f };
-	mLights[3].Strength = { 1.0f, 1.0f, 1.0f };
-	mLights[3].FalloffStart = 40;
-	mLights[3].FalloffEnd = 60;
+	//mLights[3].Position = { 90.0f, 8.0f, 90.0f };
+	//mLights[3].Strength = { 1.0f, 1.0f, 1.0f };
+	//mLights[3].FalloffStart = 40;
+	//mLights[3].FalloffEnd = 60;
 
-	mLights[4].Position = { 90.0f, 8.0f, 0.0f };
-	mLights[4].Strength = { 1.0f, 1.0f, 1.0f };
-	mLights[4].FalloffStart = 40;
-	mLights[4].FalloffEnd = 60;
+	//mLights[4].Position = { 90.0f, 8.0f, 0.0f };
+	//mLights[4].Strength = { 1.0f, 1.0f, 1.0f };
+	//mLights[4].FalloffStart = 40;
+	//mLights[4].FalloffEnd = 60;
 
-	mLights[5].Position = { 90.0f, 8.0f, -90.0f };
-	mLights[5].Strength = { 1.0f, 1.0f, 1.0f };
-	mLights[5].FalloffStart = 40;
-	mLights[5].FalloffEnd = 60;
+	//mLights[5].Position = { 90.0f, 8.0f, -90.0f };
+	//mLights[5].Strength = { 1.0f, 1.0f, 1.0f };
+	//mLights[5].FalloffStart = 40;
+	//mLights[5].FalloffEnd = 60;
 
-	mLights[6].Position = { 0.0f, 8.0f, -90.0f };
-	mLights[6].Strength = { 1.0f, 1.0f, 1.0f };
-	mLights[6].FalloffStart = 40;
-	mLights[6].FalloffEnd = 60;
+	//mLights[6].Position = { 0.0f, 8.0f, -90.0f };
+	//mLights[6].Strength = { 1.0f, 1.0f, 1.0f };
+	//mLights[6].FalloffStart = 40;
+	//mLights[6].FalloffEnd = 60;
 
-	mLights[7].Position = { -90.0f, 8.0f, -90.0f };
-	mLights[7].Strength = { 1.0f, 1.0f, 1.0f };
-	mLights[7].FalloffStart = 40;
-	mLights[7].FalloffEnd = 60;
+	//mLights[7].Position = { -90.0f, 8.0f, -90.0f };
+	//mLights[7].Strength = { 1.0f, 1.0f, 1.0f };
+	//mLights[7].FalloffStart = 40;
+	//mLights[7].FalloffEnd = 60;
 
-	mLights[8].Position = { -90.0f, 8.0f, 0.0f };
-	mLights[8].Strength = { 1.0f, 1.0f, 1.0f };
-	mLights[8].FalloffStart = 40;
-	mLights[8].FalloffEnd = 60;
+	//mLights[8].Position = { -90.0f, 8.0f, 0.0f };
+	//mLights[8].Strength = { 1.0f, 1.0f, 1.0f };
+	//mLights[8].FalloffStart = 40;
+	//mLights[8].FalloffEnd = 60;
 
-	mLights[9].Position = { -90.0f, 8.0f, 90.0f };
-	mLights[9].Strength = { 1.0f, 1.0f, 1.0f };
-	mLights[9].FalloffStart = 40;
-	mLights[9].FalloffEnd = 60;
+	//mLights[9].Position = { -90.0f, 8.0f, 90.0f };
+	//mLights[9].Strength = { 1.0f, 1.0f, 1.0f };
+	//mLights[9].FalloffStart = 40;
+	//mLights[9].FalloffEnd = 60;
 
 	// Auto generate light positions based on desired count
 	// (Used for benchmarking lighting system)
@@ -132,19 +132,23 @@ void SceneManager::Initialize(Spectral::Graphics::GraphicsCore* graphicsCore)
 
 void SceneManager::UpdateScene(float dt)
 {
+	static float theta = 1.5f*XM_PI;
+	const float phi = 0.40f*XM_PI;
+	const float radius = 60.0f;
+
+	theta += dt * 0.00025f;
 	if (mBenchmarking)
 	{
 		// Convert Spherical to Cartesian coordinates.
-		static float theta = 1.5f*XM_PI; 
-		const float phi = 0.40f*XM_PI;
-		const float radius = 60.0f;
 
-		theta += dt * 0.0005f;
 		float x = radius * sinf(phi)*cosf(theta);
 		float z = radius * sinf(phi)*sinf(theta);
 		float y = radius * cosf(phi);
 		mSceneCamera.LookAt(XMFLOAT3(x, y, z), XMFLOAT3(0.0f, 0.0f, 0.0f), XMFLOAT3(0.0f, 1.0f, 0.0f));
 	}
+
+	mLights[0].Position = XMFLOAT3(radius*sinf(phi)*cosf(theta), 3, radius*sinf(phi)*sinf(theta));
+	mGraphicsCore->SubmitSceneLights(mLights, 0, mLights.size());
 
 	mSceneCamera.UpdateViewMatrix();
 
@@ -239,7 +243,7 @@ void SceneManager::BuildRenderItems()
 
 	auto boxRitem = std::make_unique<RenderPacket>();
 	XMStoreFloat4x4(&boxRitem->World, XMMatrixScaling(2.0f, 2.0f, 2.0f)*XMMatrixTranslation(0.0f, 1.0f, 0.0f));
-	//XMStoreFloat4x4(&boxRitem->TexTransform, XMMatrixScaling(0.3f, 0.3f, 0.3f));
+	//XMStoreFloat4x4(&boxRitem->TexTransform, XMMatrixScaling(1.3f, 1.3f, 1.3f));
 	//boxRitem->ObjCBIndex = 0;
 	boxRitem->Mat = mMaterials["stone0"].get();
 	boxRitem->Geo = mGeometries["shapeGeo"].get();
@@ -258,7 +262,7 @@ void SceneManager::BuildRenderItems()
 	//gridRitem->ObjCBIndex = 1;
 	gridRitem->Mat = mMaterials["tile0"].get();
 	gridRitem->Geo = mGeometries["shapeGeo"].get();
-	gridRitem->PSO = NamedPSO::NormalMap;
+	gridRitem->PSO = NamedPSO::NormalWithShadowMap;
 	gridRitem->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 	gridRitem->IndexCount = gridRitem->Geo->DrawArgs["grid"].IndexCount;
 	gridRitem->StartIndexLocation = gridRitem->Geo->DrawArgs["grid"].StartIndexLocation;
@@ -315,7 +319,7 @@ void SceneManager::BuildRenderItems()
 		//leftCylRitem->ObjCBIndex = objCBIndex++;
 		leftCylRitem->Mat = mMaterials["bricks0"].get();
 		leftCylRitem->Geo = mGeometries["shapeGeo"].get();
-		leftCylRitem->PSO = NamedPSO::NormalMap;
+		leftCylRitem->PSO = NamedPSO::NormalWithShadowMap;
 		leftCylRitem->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 		leftCylRitem->IndexCount = leftCylRitem->Geo->DrawArgs["cylinder"].IndexCount;
 		leftCylRitem->StartIndexLocation = leftCylRitem->Geo->DrawArgs["cylinder"].StartIndexLocation;

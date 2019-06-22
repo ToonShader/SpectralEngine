@@ -9,7 +9,7 @@
 extern const int gNumFrameResources;
 
 // Shaders are always in pairs of 2
-enum NamedPSO { Default, Default_WF, NormalMap, NormalMap_WF, SkyMap, SkyMap_WF, Count };
+enum NamedPSO { Default, Default_WF, NormalMap, NormalMap_WF, NormalWithShadowMap, ShadowMap, SkyMap, SkyMap_WF, Count, NONE}; // TODO: Add more shadow variations? Fix format/order
 
 struct RenderPacket
 {

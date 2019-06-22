@@ -3,6 +3,7 @@
 #include "Common/Math.h"
 
 
+
 struct Light
 {
 	// Packed to match HLSL packing rules
@@ -12,4 +13,10 @@ struct Light
 	float FalloffEnd = 10.0f;
 	DirectX::XMFLOAT3 Position = { 0.0f, 0.0f, 0.0f };
 	float SpotPower = 64.0f;
+
+
 };
+
+typedef Light DirectionalLight;
+typedef Light SpotLight;
+typedef Light PointLight;

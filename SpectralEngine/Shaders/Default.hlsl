@@ -6,11 +6,11 @@
 
 // Defaults for number of lights.
 #ifndef NUM_DIR_LIGHTS
-    #define NUM_DIR_LIGHTS 0
+    #define NUM_DIR_LIGHTS 1
 #endif
 
 #ifndef NUM_POINT_LIGHTS
-    #define NUM_POINT_LIGHTS 10
+    #define NUM_POINT_LIGHTS 0
 #endif
 
 #ifndef NUM_SPOT_LIGHTS
@@ -23,6 +23,8 @@
 Texture2D	gDiffuseMap : register(t0, space0);
 Texture2D	gNormalMap : register(t1, space0);
 TextureCube gCubeMap : register(t2, space0);
+Texture2D	gShadowMap : register(t3, space0); // TODO: SHIFT UP ONE
+
 // Indices [0, NUM_DIR_LIGHTS) are directional lights;
 // indices [NUM_DIR_LIGHTS, NUM_DIR_LIGHTS+NUM_POINT_LIGHTS) are point lights;
 // indices [NUM_DIR_LIGHTS+NUM_POINT_LIGHTS, NUM_DIR_LIGHTS+NUM_POINT_LIGHT+NUM_SPOT_LIGHTS)
@@ -36,9 +38,10 @@ SamplerState gsamLinearWrap       : register(s2);
 SamplerState gsamLinearClamp      : register(s3);
 SamplerState gsamAnisotropicWrap  : register(s4);
 SamplerState gsamAnisotropicClamp : register(s5);
+SamplerComparisonState gsamShadowBorder	  : register(s6);
 
 // Constant data that varies per frame.
-cbuffer cbPerObject : register(b2)
+cbuffer cbPerObject : register(b2) // TODO: Reverse cb order and check performance
 {
     float4x4 gWorld;
 	float4x4 gTexTransform;
@@ -46,9 +49,9 @@ cbuffer cbPerObject : register(b2)
 
 cbuffer cbMaterial : register(b1)
 {
-	float4 gAmbientLight;
+	float4 gAmbientLight; // TODO: Can also have ambient as a term in the pass buffer
 	float4 gDiffuseAlbedo;
-    float3 gFresnelR0;
+    float3 gFresnelR0; // TODO: Shove some of these into the mat struct and access those by index to reduce writes
     float  gRoughness;
 	float4x4 gMatTransform;
 };
@@ -62,6 +65,7 @@ cbuffer cbPass : register(b0)
 	float4x4 gInvProj;
 	float4x4 gViewProj;
 	float4x4 gInvViewProj;
+	float4x4 gShadowTransform;
 	float3 gEyePosW;
 	float gNumActiveLights;
 	float2 gRenderTargetSize;
@@ -74,19 +78,20 @@ cbuffer cbPass : register(b0)
  
 struct VertexIn
 {
-	float3 PosL    : POSITION;
-    float3 NormalL : NORMAL;
-	float2 TexC    : TEXCOORD;
+	float3 PosL		: POSITION;
+    float3 NormalL	: NORMAL;
+	float2 TexC		: TEXCOORD;
 	float3 TangentU : TANGENT;
 };
 
 struct VertexOut
 {
-	float4 PosH		: SV_POSITION;
-    float3 PosW		: POSITION;
-    float3 NormalW	: NORMAL;
-	float3 TangentW	: TANGENT;
-	float2 TexC		: TEXCOORD;
+	float4 PosH			: SV_POSITION;
+    float4 ShadowPosH	: POSITION0;
+	float3 PosW			: POSITION1;
+    float3 NormalW		: NORMAL;
+	float3 TangentW		: TANGENT;
+	float2 TexC			: TEXCOORD;
 };
 
 struct SkyVertexOut
@@ -186,12 +191,24 @@ VertexOut VS_NormalMapped(VertexIn vin)
 	float4 texC = mul(float4(vin.TexC, 0.0f, 1.0f), gTexTransform);
 	vout.TexC = mul(texC, gMatTransform).xy;
 
+#ifdef SHADOW_MAPPED
+	// Generate projective tex-coords to project shadow map onto scene.
+	vout.ShadowPosH = mul(posW, gShadowTransform);
+#endif
+
 	return vout;
 }
 
 float4 PS_NormalMapped(VertexOut pin) : SV_Target
 {
 	float4 diffuseAlbedo = gDiffuseMap.Sample(gsamAnisotropicWrap, pin.TexC);// *gDiffuseAlbedo;
+
+#ifdef ALPHA_TEST
+	// Discard pixel if texture alpha < 0.1.  We do this test as soon 
+	// as possible in the shader so that we can potentially exit the
+	// shader early, thereby skipping the rest of the shader code.
+	clip(diffuseAlbedo.a - 0.1f);
+#endif
 
 	// Interpolating normal can unnormalize it, so renormalize it.
 	pin.NormalW = normalize(pin.NormalW);
@@ -205,10 +222,14 @@ float4 PS_NormalMapped(VertexOut pin) : SV_Target
 	// Indirect lighting.
 	float4 ambient = gAmbientLight * diffuseAlbedo;// gDiffuseAlbedo;
 
+	float3 shadowFactor = float3(1.0f, 1.0f, 1.0f);
+#ifdef SHADOW_MAPPED
+	// Only the first light casts a shadow.
+	shadowFactor[0] = CalcShadowFactor(gShadowMap,gsamShadowBorder, pin.ShadowPosH); // TODO: Fix, obviously
+#endif
 	// Shininess is stored at a per-pixel level in the normal map alpha channel.
-	const float shininess = (1.0f - gRoughness) * normalMapSample.a;
+	const float shininess = 0;// (1.0f - gRoughness) * normalMapSample.a;
 	Material mat = { diffuseAlbedo /*gDiffuseAlbedo*/, gFresnelR0, shininess };
-	float3 shadowFactor = 1.0f;
 	float4 directLight = ComputeLighting(gLights, mat, pin.PosW,
 		bumpedNormalW, toEyeW, shadowFactor/*, gNumActiveLights*/);
 
@@ -218,6 +239,8 @@ float4 PS_NormalMapped(VertexOut pin) : SV_Target
 	litColor.a = diffuseAlbedo.a; // gDiffuseAlbedo.a;
 
 	return litColor;
+	//return gShadowMap.SampleCmpLevelZero(gsamShadowBorder, pin.ShadowPosH.xy, pin.ShadowPosH.z);
+	//return float4(gShadowMap.Sample(gsamLinearWrap, pin.ShadowPosH.xy).rrr, 1.0f);
 }
 
 // Sky mapping shaders
@@ -246,3 +269,62 @@ float4 PS_SkyMap(SkyVertexOut pin) : SV_Target
 }
 
 
+// ShadowMap shaders
+// TODO: Break apart all shaders into separate files and add to build steps
+
+
+
+struct ShadowVertexIn
+{
+	float3 PosL    : POSITION;
+	float2 TexC    : TEXCOORD;
+};
+
+struct ShadowVertexOut
+{
+	float4 PosH    : SV_POSITION;
+	float2 TexC    : TEXCOORD;
+};
+
+ShadowVertexOut VS_ShadowMap(ShadowVertexIn vin)
+{
+	ShadowVertexOut vout = (ShadowVertexOut)0.0f;
+
+	// MaterialData matData = gMaterialData[gMaterialIndex];
+
+	// Transform to world space.
+	float4 posW = mul(float4(vin.PosL, 1.0f), gWorld);
+
+	// Transform to homogeneous clip space.
+	vout.PosH = mul(posW, gViewProj);
+
+	// Output vertex attributes for interpolation across triangle.
+	float4 texC = mul(float4(vin.TexC, 0.0f, 1.0f), gTexTransform);
+	vout.TexC = mul(texC, gMatTransform /*matData.MatTransform*/).xy;
+
+	return vout;
+}
+
+// This is only used for alpha cut out geometry, so that shadows 
+// show up correctly.  Geometry that does not need to sample a
+// texture can use a NULL pixel shader for depth pass.
+void PS_ShadowMap(ShadowVertexOut pin)
+{
+	// Fetch the material data.
+	float4 diffuseAlbedo = gDiffuseAlbedo;
+
+	//MaterialData matData = gMaterialData[gMaterialIndex];
+	//float4 diffuseAlbedo = matData.DiffuseAlbedo;
+	//uint diffuseMapIndex = matData.DiffuseMapIndex;
+
+	// Dynamically look up the texture in the array.
+	//diffuseAlbedo *= gTextureMaps[diffuseMapIndex].Sample(gsamAnisotropicWrap, pin.TexC);
+	diffuseAlbedo *= gDiffuseMap.Sample(gsamAnisotropicWrap, pin.TexC);
+
+#ifdef ALPHA_TEST
+	// Discard pixel if texture alpha < 0.1.  We do this test as soon 
+	// as possible in the shader so that we can potentially exit the
+	// shader early, thereby skipping the rest of the shader code.
+	clip(diffuseAlbedo.a - 0.1f);
+#endif
+}

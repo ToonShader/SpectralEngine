@@ -95,6 +95,11 @@
     <ClInclude Include="Asset_Conditioning\tiny_obj_loader.h">
       <Filter>Source Files\Asset_Conditioning</Filter>
     </ClInclude>
+    <ClInclude Include="TEMP\Shadows\FrameResource.h" />
+    <ClInclude Include="TEMP\Shadows\ShadowMap.h" />
+    <ClInclude Include="Graphics\DepthStencilBuffer.h">
+      <Filter>Source Files\Graphics</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Run.cpp">
@@ -136,6 +141,9 @@
     <ClCompile Include="Asset_Conditioning\ObjectConditioner.cpp">
       <Filter>Source Files\Asset_Conditioning</Filter>
     </ClCompile>
+    <ClCompile Include="Graphics\DepthStencilBuffer.cpp">
+      <Filter>Source Files\Graphics</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="Shaders\LightingUtil.hlsl">
@@ -174,5 +182,11 @@
     <None Include="Shaders\Default.hlsl">
       <Filter>Shaders</Filter>
     </None>
+    <None Include="TEMP\Shadows\Shaders\Common.hlsl" />
+    <None Include="TEMP\Shadows\Shaders\Default.hlsl" />
+    <None Include="TEMP\Shadows\Shaders\LightingUtil.hlsl" />
+    <None Include="TEMP\Shadows\Shaders\ShadowDebug.hlsl" />
+    <None Include="TEMP\Shadows\Shaders\Shadows.hlsl" />
+    <None Include="TEMP\Shadows\Shaders\Sky.hlsl" />
   </ItemGroup>
 </Project>

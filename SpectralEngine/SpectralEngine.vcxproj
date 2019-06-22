@@ -33,10 +33,13 @@
     <ClInclude Include="Graphics\Material.h" />
     <ClInclude Include="Graphics\Mesh.h" />
     <ClInclude Include="Graphics\RenderPacket.h" />
+    <ClInclude Include="Graphics\DepthStencilBuffer.h" />
     <ClInclude Include="Microsoft\d3dx12.h" />
     <ClInclude Include="Microsoft\DDSTextureLoader.h" />
     <ClInclude Include="Scene\SceneManager.h" />
     <ClInclude Include="TEMP\Common\GeometryGenerator.h" />
+    <ClInclude Include="TEMP\Shadows\FrameResource.h" />
+    <ClInclude Include="TEMP\Shadows\ShadowMap.h" />
     <None Include="TEMP\FrameResource.h" />
   </ItemGroup>
   <ItemGroup>
@@ -49,6 +52,7 @@
     <ClCompile Include="Graphics\GraphicsCore.cpp" />
     <ClCompile Include="Graphics\Mesh.cpp" />
     <ClCompile Include="Graphics\RenderPacket.cpp" />
+    <ClCompile Include="Graphics\DepthStencilBuffer.cpp" />
     <ClCompile Include="Microsoft\DDSTextureLoader.cpp" />
     <ClCompile Include="Run.cpp" />
     <ClCompile Include="Scene\SceneManager.cpp" />
@@ -92,6 +96,26 @@
       <FileType>Document</FileType>
     </None>
     <None Include="Shaders\Sky.hlsl">
+      <FileType>Document</FileType>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="TEMP\Shadows\Shaders\Common.hlsl">
+      <FileType>Document</FileType>
+    </None>
+    <None Include="TEMP\Shadows\Shaders\Default.hlsl">
+      <FileType>Document</FileType>
+    </None>
+    <None Include="TEMP\Shadows\Shaders\LightingUtil.hlsl">
+      <FileType>Document</FileType>
+    </None>
+    <None Include="TEMP\Shadows\Shaders\ShadowDebug.hlsl">
+      <FileType>Document</FileType>
+    </None>
+    <None Include="TEMP\Shadows\Shaders\Shadows.hlsl">
+      <FileType>Document</FileType>
+    </None>
+    <None Include="TEMP\Shadows\Shaders\Sky.hlsl">
       <FileType>Document</FileType>
     </None>
   </ItemGroup>
