@@ -225,10 +225,10 @@ float4 PS_NormalMapped(VertexOut pin) : SV_Target
 	float3 shadowFactor = float3(1.0f, 1.0f, 1.0f);
 #ifdef SHADOW_MAPPED
 	// Only the first light casts a shadow.
-	shadowFactor[0] = CalcShadowFactor(gShadowMap,gsamShadowBorder, pin.ShadowPosH); // TODO: Fix, obviously
+	shadowFactor[0] = CalcShadowFactor(gShadowMap, gsamShadowBorder, pin.ShadowPosH); // TODO: Fix, obviously
 #endif
 	// Shininess is stored at a per-pixel level in the normal map alpha channel.
-	const float shininess = 0;// (1.0f - gRoughness) * normalMapSample.a;
+	const float shininess = (1.0f - gRoughness) * normalMapSample.a;
 	Material mat = { diffuseAlbedo /*gDiffuseAlbedo*/, gFresnelR0, shininess };
 	float4 directLight = ComputeLighting(gLights, mat, pin.PosW,
 		bumpedNormalW, toEyeW, shadowFactor/*, gNumActiveLights*/);

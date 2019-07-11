@@ -285,8 +285,6 @@ void GraphicsCore::testrender(const Camera& camera)
 		ASSERT_HR(mCommandList->Reset(cmdListAlloc.Get(), mPSOs[NamedPSO::Default].Get()));
 	}
 
-	mCommandList->RSSetViewports(1, &mScreenViewport);
-	mCommandList->RSSetScissorRects(1, &mScissorRect);
 
 	// Indicate a state transition on the resource usage.
 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),
@@ -296,7 +294,8 @@ void GraphicsCore::testrender(const Camera& camera)
 	mCommandList->ClearRenderTargetView(CurrentBackBufferView(), Colors::LightSteelBlue, 0, nullptr);
 	mCommandList->ClearDepthStencilView(DepthStencilView(), D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
 
-	// Specify the buffers we are going to crerender to.
+	// TODO: Resolve to helper
+	// Specify the buffers we are going to render to.
 	mCommandList->OMSetRenderTargets(0, nullptr, true, &mShadowMaps[0].Dsv());
 
 	mCommandList->SetGraphicsRootSignature(mRootSignature.Get()); // TODO: May need to put descriptor heaps after this
@@ -306,6 +305,8 @@ void GraphicsCore::testrender(const Camera& camera)
 
 	RenderShadowMaps();
 
+	mCommandList->RSSetViewports(1, &mScreenViewport);
+	mCommandList->RSSetScissorRects(1, &mScissorRect);
 	mCommandList->OMSetRenderTargets(1, &CurrentBackBufferView(), true, &DepthStencilView());
 
 	mCommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
@@ -723,7 +724,7 @@ void GraphicsCore::UpdateShadowPassCB(const DepthStencilBuffer::ShadowMap& map)
 	mShadowPassCB.FarZ = map.mLightFarZ;
 
 	auto currPassCB = mCurrFrameResource->PassCB.get();
-	currPassCB->CopyData(1, mShadowPassCB);
+	currPassCB->CopyData(1, mShadowPassCB); // TODO: FIX MAGIC
 }
 
 void GraphicsCore::CullObjectsByFrustum(std::vector<RenderPacket*>& visible, const std::vector<RenderPacket*>& objects, const DirectX::BoundingFrustum& frustum, FXMMATRIX view)
@@ -1154,8 +1155,9 @@ void GraphicsCore::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, ID3D12Com
 			UpdateObjectCBs(ritems, i, NUM_CBUFFERS);
 			UpdateMaterialCBs(ritems, i, NUM_CBUFFERS);
 
-			cmdList->RSSetViewports(1, &mScreenViewport);
-			cmdList->RSSetScissorRects(1, &mScissorRect);
+			// TODO: May need to pass in some sort of render state object for reseting state after command list execution.
+			//cmdList->RSSetViewports(1, &mScreenViewport);
+			//cmdList->RSSetScissorRects(1, &mScissorRect);
 
 			// TODO: Encapsulate and pass desired RTV and DSV in a class
 			// Specify the buffers we are going to render to.
