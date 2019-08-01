@@ -1,6 +1,6 @@
 #include "ObjectConditioner.h"
 #include "Graphics/GraphicsCore.h"
-#include "Common/Utility.h"
+#include "Common/CommonUtility.h"
 #include "Common/Math.h"
 
 #define TINYOBJLOADER_IMPLEMENTATION

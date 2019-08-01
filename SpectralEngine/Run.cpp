@@ -1,7 +1,7 @@
 #include "Common\Timer.h"
 #include "Common\WindowManager.h"
 #include "Graphics\GraphicsCore.h"
-#include "Common\Utility.h"
+#include "Common\CommonUtility.h"
 #include "TEMP\Common\GeometryGenerator.h"
 #include "Common\Math.h"
 #include "Microsoft\DDSTextureLoader.h"

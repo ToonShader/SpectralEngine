@@ -65,8 +65,8 @@ struct RenderPacket
 	//RenderPacket(const RenderItem& rhs) = delete;
 
 	// Index into GPU constant buffer this packet is written into.
-	UINT ObjectCBIndex = -1;
-	UINT MaterialCBIndex = -1;
+	UINT ObjectCBIndex = UINT_MAX;
+	UINT MaterialCBIndex = UINT_MAX;
 
 	DirectX::XMFLOAT4X4 World = Spectral::Math::XMF4x4Identity();
 	XMFLOAT4X4 TexTransform = Spectral::Math::XMF4x4Identity();

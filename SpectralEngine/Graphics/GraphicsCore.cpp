@@ -1,6 +1,7 @@
 #include "GraphicsCore.h"
+#include "GraphicsUtility.h"
 #include "Material.h"
-#include "Common/Utility.h"
+#include "Common/CommonUtility.h"
 #include "Microsoft/d3dx12.h"
 #include "Microsoft/DDSTextureLoader.h"
 #include <Math.h>
@@ -9,10 +10,8 @@
 #include <d3d12SDKLayers.h>
 //#include <nvToolsExt.h>
 
-//#pragma comment(lib, "d3dcompiler.lib")
 #pragma comment(lib, "D3D12.lib")
 #pragma comment(lib, "dxgi.lib")
-#pragma comment(lib, "d3dcompiler.lib")
 
 //using namespace SpectralEditor;
 
@@ -243,12 +242,12 @@ void GraphicsCore::RenderPrePass()
 	FlushCommandQueue();
 }
 
-void GraphicsCore::UpdateScene()
+void GraphicsCore::UpdateScene(const Camera& camera)
 {
 	// TODO: Resolve for multiple shadows
 	mShadowMaps[0].UpdateShadowTransform(mLights[0], BoundingSphere(XMFLOAT3(mLights[0].Position.x, 3, mLights[0].Position.z), 15));
 
-	UpdateMainPassCB();
+	UpdateMainPassCB(camera);
 	UpdateShadowPassCB(mShadowMaps[0]);
 
 	// TODO: Validate no race condition with executing GPU commands
@@ -256,32 +255,12 @@ void GraphicsCore::UpdateScene()
 	UpdateMaterialCBs(mRenderPacketLayers[RenderLayer::ALL]);
 }
 
-void GraphicsCore::RenderScene(const Camera& camera)
+void GraphicsCore::RenderScene()
 {
 	//nvtxRangePushW(L"Scene Render");
 
-	DirectX::XMStoreFloat4x4(&mProj, camera.GetProj());
-	DirectX::XMStoreFloat4x4(&mView, camera.GetView());
-	DirectX::XMStoreFloat3(&mEyePos, camera.GetPosition());
-
-	// Each region marks distinct behavior which will be moved or removed soon.
-#pragma region UPDATE
-	//mCurrFrameResourceIndex = (mCurrFrameResourceIndex + 1) % gNumFrameResources;
-	//mCurrFrameResource = mFrameResources[mCurrFrameResourceIndex].get();
-
-	// Force completion of any unexecuted GPU commands
-	//if (mCurrFrameResource->Fence != 0 && mFence->GetCompletedValue() < mCurrFrameResource->Fence)
-	//{
-	//	HANDLE eventHandle = CreateEventEx(nullptr, false, false, EVENT_ALL_ACCESS);
-	//	ASSERT_HR(mFence->SetEventOnCompletion(mCurrFrameResource->Fence, eventHandle));
-	//	WaitForSingleObject(eventHandle, INFINITE);
-	//	CloseHandle(eventHandle);
-	//}
-
 	FlushCommandQueue();
-#pragma endregion
 
-#pragma region DRAW
 	auto cmdListAllocator = mCurrFrameResource->CmdListAlloc;
 
 	// Reuse the memory associated with command recording (Optional).
@@ -362,8 +341,6 @@ void GraphicsCore::RenderScene(const Camera& camera)
 
 	// Set the fence.
 	mCommandQueue->Signal(mFence.Get(), mCurrentFence);
-
-#pragma endregion
 
 	//nvtxRangePop();
 }
@@ -670,14 +647,14 @@ void GraphicsCore::UpdateMaterialCBs(const std::vector<RenderPacket*>& packets)
 	//nvtxRangePop();
 }
 
-void GraphicsCore::UpdateMainPassCB()
+void GraphicsCore::UpdateMainPassCB(const Camera& camera)
 {
 	//nvtxRangePushW(L"Update MPCB");
 
 	// This is overkill for now, but may prove useful in the future if
 	// I decide to keep per-pass CBs
-	XMMATRIX view = XMLoadFloat4x4(&mView);
-	XMMATRIX proj = XMLoadFloat4x4(&mProj);
+	XMMATRIX view = camera.GetView();
+	XMMATRIX proj = camera.GetProj();
 
 	XMMATRIX viewProj = XMMatrixMultiply(view, proj);
 	XMMATRIX invView = XMMatrixInverse(&XMMatrixDeterminant(view), view);
@@ -693,7 +670,7 @@ void GraphicsCore::UpdateMainPassCB()
 	DirectX::XMStoreFloat4x4(&mMainPassCB.ViewProj, XMMatrixTranspose(viewProj));
 	DirectX::XMStoreFloat4x4(&mMainPassCB.InvViewProj, XMMatrixTranspose(invViewProj));
 	DirectX::XMStoreFloat4x4(&mMainPassCB.ShadowTransform, XMMatrixTranspose(shadowTransform));
-	mMainPassCB.EyePosW = mEyePos;
+	mMainPassCB.EyePosW = camera.GetPosition3f();
 	mMainPassCB.NumActiveLights = 10;
 	mMainPassCB.RenderTargetSize = XMFLOAT2((float)mClientWidth, (float)mClientHeight);
 	mMainPassCB.InvRenderTargetSize = XMFLOAT2(1.0f / mClientWidth, 1.0f / mClientHeight);
@@ -843,8 +820,8 @@ std::array<const CD3DX12_STATIC_SAMPLER_DESC, 7> GraphicsCore::GetStaticSamplers
 
 void GraphicsCore::BuildDescriptorHeaps()
 {
-	// The design of this system isn't fully decided,
-	// but for now the number of buffers is fixed.
+	// The design of this system isn't fully decided, but for
+	// performance and flexibility the number of buffers is fixed.
 	UINT bufferCount = MAX_BUFFER_COUNT;
 
 	// Need 2 CBV descriptors for each object for each frame resource,
@@ -1469,29 +1446,4 @@ void GraphicsCore::SetFullScreen(bool fullscreen)
 	}
 }
 
-// Temporary home
-Microsoft::WRL::ComPtr<ID3DBlob> CompileShader(
-	const std::wstring& filename,
-	const D3D_SHADER_MACRO* defines,
-	const std::string& entrypoint,
-	const std::string& target)
-{
-	UINT compileFlags = 0;
-#ifndef RELEASE  
-	compileFlags = D3DCOMPILE_PREFER_FLOW_CONTROL | D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
-#endif
 
-	HRESULT hr = S_OK;
-
-	Microsoft::WRL::ComPtr<ID3DBlob> byteCode = nullptr;
-	Microsoft::WRL::ComPtr<ID3DBlob> errors;
-	hr = D3DCompileFromFile(filename.c_str(), defines, D3D_COMPILE_STANDARD_FILE_INCLUDE,
-		entrypoint.c_str(), target.c_str(), compileFlags, 0, &byteCode, &errors);
-
-	if (errors != nullptr)
-		OutputDebugStringA((char*)errors->GetBufferPointer());
-
-	ASSERT_HR(hr);
-
-	return byteCode;
-}

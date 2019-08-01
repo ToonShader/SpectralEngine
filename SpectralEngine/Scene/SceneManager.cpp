@@ -1,6 +1,6 @@
 #include "SceneManager.h"
 #include "Asset_Conditioning/ObjectConditioner.h"
-#include "Common\Utility.h"
+#include "Common\CommonUtility.h"
 #include "Common\Math.h"
 #include "TEMP\Common\GeometryGenerator.h"
 #include "Microsoft\DDSTextureLoader.h"
@@ -166,12 +166,12 @@ void SceneManager::UpdateScene(float dt)
 		}
 	}
 
-	mGraphicsCore->UpdateScene();
+	mGraphicsCore->UpdateScene(mSceneCamera);
 }
 
 void SceneManager::DrawScene()
 {
-	mGraphicsCore->RenderScene(mSceneCamera);
+	mGraphicsCore->RenderScene();
 }
 
 void SceneManager::Destroy()

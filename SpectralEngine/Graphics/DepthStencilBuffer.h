@@ -5,7 +5,7 @@
 
 #include "Microsoft/d3dx12.h"
 #include "Graphics/Lighting.h"
-#include "Common/Utility.h"
+#include "Common/CommonUtility.h"
 
 
 

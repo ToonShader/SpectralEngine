@@ -25,10 +25,11 @@
     <ClInclude Include="Common\Math.h" />
     <ClInclude Include="Common\Timer.h" />
     <ClInclude Include="Common\Types.h" />
-    <ClInclude Include="Common\Utility.h" />
+    <ClInclude Include="Common\CommonUtility.h" />
     <ClInclude Include="Common\WindowManager.h" />
     <ClInclude Include="Graphics\FrameResource.h" />
     <ClInclude Include="Graphics\GraphicsCore.h" />
+    <ClInclude Include="Graphics\GraphicsUtility.h" />
     <ClInclude Include="Graphics\Lighting.h" />
     <ClInclude Include="Graphics\Material.h" />
     <ClInclude Include="Graphics\Mesh.h" />
@@ -40,7 +41,6 @@
     <ClInclude Include="TEMP\Common\GeometryGenerator.h" />
     <ClInclude Include="TEMP\Shadows\FrameResource.h" />
     <ClInclude Include="TEMP\Shadows\ShadowMap.h" />
-    <None Include="TEMP\FrameResource.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Asset_Conditioning\ObjectConditioner.cpp" />
@@ -48,8 +48,10 @@
     <ClCompile Include="Common\Math.cpp" />
     <ClCompile Include="Common\Timer.cpp" />
     <ClCompile Include="Common\WindowManager.cpp" />
+    <ClCompile Include="Gems.cpp" />
     <ClCompile Include="Graphics\FrameResource.cpp" />
     <ClCompile Include="Graphics\GraphicsCore.cpp" />
+    <ClCompile Include="Graphics\GraphicsUtility.cpp" />
     <ClCompile Include="Graphics\Mesh.cpp" />
     <ClCompile Include="Graphics\RenderPacket.cpp" />
     <ClCompile Include="Graphics\DepthStencilBuffer.cpp" />
@@ -57,15 +59,6 @@
     <ClCompile Include="Run.cpp" />
     <ClCompile Include="Scene\SceneManager.cpp" />
     <ClCompile Include="TEMP\Common\GeometryGenerator.cpp" />
-    <None Include="TEMP\FrameResource.cpp" />
-    <None Include="TEMP\TexColumnsApp.cpp" />
-    <None Include="TEMP\LitColumnsApp.cpp" />
-    <None Include="TEMP\Shapes\ShapesApp.cpp" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="TEMP\Shapes\color.hlsl">
-      <FileType>Document</FileType>
-    </None>
   </ItemGroup>
   <ItemGroup>
     <None Include="Shaders\Default.hlsl">
@@ -81,14 +74,6 @@
     <None Include="Shaders\LightingUtil.hlsl">
       <FileType>Document</FileType>
       <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">5.1</ShaderModel>
-    </None>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="TEMP\Default.hlsl">
-      <FileType>Document</FileType>
-    </None>
-    <None Include="TEMP\LightingUtil.hlsl">
-      <FileType>Document</FileType>
     </None>
   </ItemGroup>
   <ItemGroup>

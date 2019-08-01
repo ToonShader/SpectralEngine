@@ -27,12 +27,6 @@
     <Filter Include="TEMP\Common">
       <UniqueIdentifier>{3a507e30-c283-46fb-84d3-4730bedbedcf}</UniqueIdentifier>
     </Filter>
-    <Filter Include="TEMP\Waves">
-      <UniqueIdentifier>{62410065-9bdd-4026-baff-474d6aaff37a}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="TEMP\Shapes">
-      <UniqueIdentifier>{a5846811-343b-45f4-8133-958214bcd4f7}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Source Files\Scene">
       <UniqueIdentifier>{5111600a-2b40-48f1-b98c-f055726b7da7}</UniqueIdentifier>
     </Filter>
@@ -55,9 +49,6 @@
     </ClInclude>
     <ClInclude Include="Graphics\GraphicsCore.h">
       <Filter>Source Files\Graphics</Filter>
-    </ClInclude>
-    <ClInclude Include="Common\Utility.h">
-      <Filter>Source Files\Common</Filter>
     </ClInclude>
     <ClInclude Include="TEMP\Common\GeometryGenerator.h">
       <Filter>TEMP\Common</Filter>
@@ -98,6 +89,12 @@
     <ClInclude Include="TEMP\Shadows\FrameResource.h" />
     <ClInclude Include="TEMP\Shadows\ShadowMap.h" />
     <ClInclude Include="Graphics\DepthStencilBuffer.h">
+      <Filter>Source Files\Graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\CommonUtility.h">
+      <Filter>Source Files\Common</Filter>
+    </ClInclude>
+    <ClInclude Include="Graphics\GraphicsUtility.h">
       <Filter>Source Files\Graphics</Filter>
     </ClInclude>
   </ItemGroup>
@@ -144,34 +141,16 @@
     <ClCompile Include="Graphics\DepthStencilBuffer.cpp">
       <Filter>Source Files\Graphics</Filter>
     </ClCompile>
+    <ClCompile Include="Gems.cpp">
+      <Filter>TEMP\Common</Filter>
+    </ClCompile>
+    <ClCompile Include="Graphics\GraphicsUtility.cpp">
+      <Filter>Source Files\Graphics</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="Shaders\LightingUtil.hlsl">
       <Filter>Shaders</Filter>
-    </None>
-    <None Include="TEMP\Shapes\ShapesApp.cpp">
-      <Filter>TEMP</Filter>
-    </None>
-    <None Include="TEMP\LitColumnsApp.cpp">
-      <Filter>TEMP</Filter>
-    </None>
-    <None Include="TEMP\Shapes\color.hlsl">
-      <Filter>TEMP\Waves</Filter>
-    </None>
-    <None Include="TEMP\FrameResource.cpp">
-      <Filter>TEMP</Filter>
-    </None>
-    <None Include="TEMP\FrameResource.h">
-      <Filter>TEMP</Filter>
-    </None>
-    <None Include="TEMP\TexColumnsApp.cpp">
-      <Filter>TEMP</Filter>
-    </None>
-    <None Include="TEMP\Default.hlsl">
-      <Filter>TEMP</Filter>
-    </None>
-    <None Include="TEMP\LightingUtil.hlsl">
-      <Filter>TEMP</Filter>
     </None>
     <None Include="Shaders\Common.hlsl">
       <Filter>Shaders</Filter>

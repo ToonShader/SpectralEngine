@@ -10,7 +10,6 @@
 #include <wrl.h>
 #include <d3d12.h>
 #include <dxgi1_5.h>
-//#include <D3Dcompiler.h>
 
 #include <string>
 #include <unordered_map>
@@ -33,8 +32,7 @@ namespace Spectral
 {
 	namespace Graphics
 	{
-		// NOTE: Commented out functions, specifiers, and arguments are potential candidates for changes
-		// as this class is still being prototyped and designed.
+		// NOTE: This class is still being prototyped and designed.
 		class GraphicsCore
 		{
 		protected:
@@ -42,7 +40,7 @@ namespace Spectral
 			// way to manage core D3D control with concurrent threads.
 			GraphicsCore();
 			GraphicsCore(UINT maxNumberOfObjects);
-			/*virtual */~GraphicsCore();
+			~GraphicsCore();
 
 			GraphicsCore(const GraphicsCore& copy) = delete;
 			GraphicsCore& operator=(const GraphicsCore& rhs) = delete;
@@ -55,10 +53,9 @@ namespace Spectral
 			void SubmitRenderPackets(const std::vector<RenderPacket*>& packets, RenderLayer renderLayer);
 			void SubmitSceneLights(const std::vector<Light>& lights, int beg, int end);
 			// /*virtual*/ LRESULT MsgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
-			/*virtual*/ void RenderPrePass(/*const Timer& gt*/); /*= 0;*/
-			/*virtual*/ void Render(/*const Timer& gt*/); /*= 0;*/
-			void UpdateScene();
-			void RenderScene(const Camera& camera);
+			void RenderPrePass(/*const Timer& gt*/);
+			void UpdateScene(const Camera& camera);
+			void RenderScene();
 			// TODO: Accessors for settings screen states
 
 			Microsoft::WRL::ComPtr<ID3D12Resource> CreateDefaultBuffer(/*ID3D12Device* device, ID3D12GraphicsCommandList* cmdList,*/
@@ -83,8 +80,8 @@ namespace Spectral
 			
 
 		private:
-			/*virtual*/ bool Initialize();
-			/*virtual*/ void ResizeWindow();
+			bool Initialize();
+			void ResizeWindow();
 
 			bool InitDirect3D();
 			// IMPROVEMENT: Eventually command entities will be abstracted to a manager class
@@ -100,7 +97,7 @@ namespace Spectral
 			// It might be useful in the future to expose this
 			void RenderShadowMaps(ID3D12CommandAllocator* cmdListAllocator);
 
-			void UpdateMainPassCB();
+			void UpdateMainPassCB(const Camera& camera);
 			void UpdateObjectCBs(const std::vector<RenderPacket*>& packets);
 			void UpdateMaterialCBs(const std::vector<RenderPacket*>& packets);
 			void UpdateShadowPassCB(const DepthStencilBuffer::ShadowMap& map); // TODO: Move
@@ -111,8 +108,6 @@ namespace Spectral
 
 			// Temporary
 			std::array<const CD3DX12_STATIC_SAMPLER_DESC, 7> GetStaticSamplers();
-
-
 
 			ID3D12Resource* CurrentBackBuffer()const;
 			D3D12_CPU_DESCRIPTOR_HANDLE CurrentBackBufferView()const;
@@ -184,12 +179,6 @@ namespace Spectral
 
 			bool mIsWireframe = false;
 
-			// Temporary placement for camera parameters.
-			// TODO: Factor out and take camera as drawing argument.
-			DirectX::XMFLOAT3 mEyePos = { 0.0f, 0.0f, 0.0f };
-			DirectX::XMFLOAT4X4 mView = Math::XMF4x4Identity();
-			DirectX::XMFLOAT4X4 mProj = Math::XMF4x4Identity();
-
 			D3D12_VIEWPORT mScreenViewport;
 			D3D12_RECT mScissorRect;
 
@@ -198,7 +187,6 @@ namespace Spectral
 			UINT mCbvSrvUavDescriptorSize = 0;
 
 			//WindowManager mRenderWindow;
-			//std::wstring mMainWndCaption;
 			// Configurable parameter for later in the project
 			//D3D_DRIVER_TYPE md3dDriverType = D3D_DRIVER_TYPE_HARDWARE;
 			DXGI_FORMAT mBackBufferFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -210,11 +198,3 @@ namespace Spectral
 		};
 	}
 }
-
-
-// TODO: Needs home
-Microsoft::WRL::ComPtr<ID3DBlob> CompileShader(
-	const std::wstring& filename,
-	const D3D_SHADER_MACRO* defines,
-	const std::string& entrypoint,
-	const std::string& target);
