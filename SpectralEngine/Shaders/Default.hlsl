@@ -140,6 +140,11 @@ VertexOut VS(VertexIn vin)
 	float4 texC = mul(float4(vin.TexC, 0.0f, 1.0f), gTexTransform);
 	vout.TexC = mul(texC, gMatTransform).xy;
 
+#ifdef SHADOW_MAPPED
+	// Generate projective tex-coords to project shadow map onto scene.
+	vout.ShadowPosH = mul(posW, gShadowTransform);
+#endif
+
     return vout;
 }
 
@@ -156,9 +161,13 @@ float4 PS(VertexOut pin) : SV_Target
 	// Indirect lighting.
 	float4 ambient = gAmbientLight * diffuseAlbedo;// gDiffuseAlbedo;
 
+	float3 shadowFactor = float3(1.0f, 1.0f, 1.0f);
+#ifdef SHADOW_MAPPED
+	// Only the first light casts a shadow.
+	shadowFactor[0] = CalcShadowFactor(gShadowMap, gsamShadowBorder, pin.ShadowPosH); // TODO: Fix, obviously
+#endif
 	const float shininess = (1.0f - gRoughness);
     Material mat = { diffuseAlbedo /*gDiffuseAlbedo*/, gFresnelR0, shininess };
-    float3 shadowFactor = 1.0f;
     float4 directLight = ComputeLighting(gLights, mat, pin.PosW, 
 		pin.NormalW, toEyeW, shadowFactor/*, gNumActiveLights*/);
 
@@ -239,6 +248,7 @@ float4 PS_NormalMapped(VertexOut pin) : SV_Target
 	litColor.a = diffuseAlbedo.a; // gDiffuseAlbedo.a;
 
 	return litColor;
+	// TODO: Remove these or place into a debugging shader
 	//return gShadowMap.SampleCmpLevelZero(gsamShadowBorder, pin.ShadowPosH.xy, pin.ShadowPosH.z);
 	//return float4(gShadowMap.Sample(gsamLinearWrap, pin.ShadowPosH.xy).rrr, 1.0f);
 }

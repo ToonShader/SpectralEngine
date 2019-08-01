@@ -28,9 +28,14 @@ GraphicsCore* GraphicsCore::mGraphicsCore = nullptr;
 using namespace DirectX;
 
 const int gNumFrameResources = 1;
-const int NUM_CBUFFERS = 3000;
 
 GraphicsCore::GraphicsCore()
+{
+
+}
+
+GraphicsCore::GraphicsCore(UINT maxNumberOfObjects)
+	: MAX_BUFFER_COUNT(maxNumberOfObjects)
 {
 
 }
@@ -178,11 +183,11 @@ void GraphicsCore::ResizeWindow()
 	mScissorRect = { 0, 0, mClientWidth, mClientHeight };
 }
 
-void GraphicsCore::SubmitRenderPackets(const std::vector<RenderPacket*>& packets)
+void GraphicsCore::SubmitRenderPackets(const std::vector<RenderPacket*>& packets, const RenderLayer renderLayer)
 {
-	mAllRenderPackets.insert(mAllRenderPackets.end(), packets.begin(), packets.end());
-	// For now, all packets are also opaque
-	mOpaqueRenderPackets.insert(mOpaqueRenderPackets.end(), packets.begin(), packets.end());
+	mRenderPacketLayers[renderLayer].insert(mRenderPacketLayers[renderLayer].end(), packets.begin(), packets.end());
+	mRenderPacketLayers[RenderLayer::ALL].insert(mRenderPacketLayers[RenderLayer::ALL].end(), packets.begin(), packets.end());
+	assert(mRenderPacketLayers[RenderLayer::ALL].size() <= MAX_BUFFER_COUNT);
 }
 
 void GraphicsCore::SubmitSceneLights(const std::vector<Light>& lights, int beg, int end)
@@ -238,7 +243,20 @@ void GraphicsCore::RenderPrePass()
 	FlushCommandQueue();
 }
 
-void GraphicsCore::testrender(const Camera& camera)
+void GraphicsCore::UpdateScene()
+{
+	// TODO: Resolve for multiple shadows
+	mShadowMaps[0].UpdateShadowTransform(mLights[0], BoundingSphere(XMFLOAT3(mLights[0].Position.x, 3, mLights[0].Position.z), 15));
+
+	UpdateMainPassCB();
+	UpdateShadowPassCB(mShadowMaps[0]);
+
+	// TODO: Validate no race condition with executing GPU commands
+	UpdateObjectCBs(mRenderPacketLayers[RenderLayer::ALL]);
+	UpdateMaterialCBs(mRenderPacketLayers[RenderLayer::ALL]);
+}
+
+void GraphicsCore::RenderScene(const Camera& camera)
 {
 	//nvtxRangePushW(L"Scene Render");
 
@@ -261,28 +279,24 @@ void GraphicsCore::testrender(const Camera& camera)
 	//}
 
 	FlushCommandQueue();
-
-	mShadowMaps[0].UpdateShadowTransform(mLights[0], BoundingSphere(XMFLOAT3(mLights[0].Position.x, 3, mLights[0].Position.z), 15));
-	UpdateMainPassCB();
-	UpdateShadowPassCB(mShadowMaps[0]); // TODO: Consider moving these to the Update method
 #pragma endregion
 
 #pragma region DRAW
-	auto cmdListAlloc = mCurrFrameResource->CmdListAlloc;
+	auto cmdListAllocator = mCurrFrameResource->CmdListAlloc;
 
-	// Reuse the memory associated with command recording.
+	// Reuse the memory associated with command recording (Optional).
 	// We can only reset when the associated command lists have finished execution on the GPU.
-	ASSERT_HR(cmdListAlloc->Reset());
+	ASSERT_HR(cmdListAllocator->Reset());
 
 	// A command list can be reset after it has been added to the command queue via ExecuteCommandList.
 	// Reusing the command list reuses memory.
 	if (mIsWireframe) // TODO: This doesn't make sense anymore. WF PSOs should perhaps be auto-generated
 	{
-		ASSERT_HR(mCommandList->Reset(cmdListAlloc.Get(), mPSOs[NamedPSO::Default_WF].Get()));
+		ASSERT_HR(mCommandList->Reset(cmdListAllocator.Get(), mPSOs[NamedPSO::Default_WF].Get()));
 	}
 	else
 	{
-		ASSERT_HR(mCommandList->Reset(cmdListAlloc.Get(), mPSOs[NamedPSO::Default].Get()));
+		ASSERT_HR(mCommandList->Reset(cmdListAllocator.Get(), mPSOs[NamedPSO::Default].Get()));
 	}
 
 
@@ -303,7 +317,7 @@ void GraphicsCore::testrender(const Camera& camera)
 	ID3D12DescriptorHeap* descriptorHeaps[] = { mCbvHeap.Get() };
 	mCommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
 
-	RenderShadowMaps();
+	RenderShadowMaps(cmdListAllocator.Get());
 
 	mCommandList->RSSetViewports(1, &mScreenViewport);
 	mCommandList->RSSetScissorRects(1, &mScissorRect);
@@ -322,7 +336,11 @@ void GraphicsCore::testrender(const Camera& camera)
 
 	//std::vector<RenderPacket*> visibleRenderPackets;
 	//CullObjectsByFrustum(visibleRenderPackets, mOpaqueRenderPackets, cameraFrustum, camera.GetView());
-	DrawRenderItems(mCommandList.Get(), cmdListAlloc.Get(), mOpaqueRenderPackets);
+
+	// TODO: Depending upon shader refactor, it may be that one layer should correspond to one PSO
+	DrawRenderItems(mCommandList.Get(), cmdListAllocator.Get(), RenderLayer::Opaque, false);
+	DrawRenderItems(mCommandList.Get(), cmdListAllocator.Get(), RenderLayer::Sky, false);
+	DrawRenderItems(mCommandList.Get(), cmdListAllocator.Get(), RenderLayer::Debug, false);
 
 	// Indicate a state transition on the resource usage.
 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),
@@ -350,7 +368,7 @@ void GraphicsCore::testrender(const Camera& camera)
 	//nvtxRangePop();
 }
 
-void GraphicsCore::RenderShadowMaps()
+void GraphicsCore::RenderShadowMaps(ID3D12CommandAllocator* const cmdListAllocator)
 {
 	mCommandList->RSSetViewports(1, &mShadowMaps[0].Viewport());
 	mCommandList->RSSetScissorRects(1, &mShadowMaps[0].ScissorRect());
@@ -358,8 +376,6 @@ void GraphicsCore::RenderShadowMaps()
 	// Change to DEPTH_WRITE.
 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mShadowMaps[0].Resource(),
 		D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_DEPTH_WRITE));
-
-	UINT passCBByteSize = CalcConstantBufferByteSize(sizeof(PassConstants));
 
 	// Clear the back buffer and depth buffer.
 	mCommandList->ClearDepthStencilView(mShadowMaps[0].Dsv(),
@@ -384,7 +400,8 @@ void GraphicsCore::RenderShadowMaps()
 
 	mCommandList->SetPipelineState(mPSOs[NamedPSO::ShadowMap].Get());
 
-	DrawRenderItems(mCommandList.Get(), mCurrFrameResource->CmdListAlloc.Get(), mOpaqueRenderPackets, true); //TODO: Fix listAlloc
+	// TODO: Depending upon shader refactor, it may be that one layer should correspond to one PSO
+	DrawRenderItems(mCommandList.Get(), cmdListAllocator, RenderLayer::Opaque, true);
 
 	// Change back to GENERIC_READ so we can read the texture in a shader.
 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mShadowMaps[0].Resource(),
@@ -587,51 +604,53 @@ void GraphicsCore::FlushCommandQueue()
 	//nvtxRangePop();
 }
 
-void GraphicsCore::UpdateObjectCBs(const std::vector<RenderPacket*>& packets, int startIndex, int numToUpdate)
+// TODO: Refactor update methods into manager classes
+void GraphicsCore::UpdateObjectCBs(const std::vector<RenderPacket*>& packets)
 {
 	//nvtxRangePushW(L"Update OCBs");
 
-	assert(numToUpdate <= NUM_CBUFFERS);
+	assert(packets.size() <= MAX_BUFFER_COUNT);
+
 	auto currObjectCB = mCurrFrameResource->ObjectCB.get();
-	size_t endIndex = size_t(startIndex) + numToUpdate < packets.size() ? startIndex + numToUpdate : packets.size();
-	for (size_t i = startIndex, cbIndex = 0; i < endIndex; ++i, ++cbIndex)
+	for (size_t bufferIndex = 0; bufferIndex < packets.size(); ++bufferIndex)
 	{
-		// For pre-rendered frames, uncomment the below...
 		// Only update the cbuffer data if the constants have changed.  
 		// This needs to be tracked per frame resource.
-		//if (e->NumFramesDirty > 0)
-		//{
-			XMMATRIX world = XMLoadFloat4x4(&(packets[i]->World));
-			XMMATRIX texTransform = XMLoadFloat4x4(&(packets[i]->TexTransform));
+		if (packets[bufferIndex]->ObjectDirtyForFrame)
+		{
+			XMMATRIX world = XMLoadFloat4x4(&(packets[bufferIndex]->World));
+			XMMATRIX texTransform = XMLoadFloat4x4(&(packets[bufferIndex]->TexTransform));
 	
 			ObjectConstants objConstants;
 			DirectX::XMStoreFloat4x4(&objConstants.World, XMMatrixTranspose(world));
 			XMStoreFloat4x4(&objConstants.TexTransform, XMMatrixTranspose(texTransform));
 
-			currObjectCB->CopyData(cbIndex, objConstants);
+			currObjectCB->CopyData(bufferIndex, objConstants);
 
-			// One down, more to go?
-			//e->NumFramesDirty--;
-		//}
+			packets[bufferIndex]->ObjectCBIndex = bufferIndex;
+			packets[bufferIndex]->ObjectDirtyForFrame = false;
+		}
 	}
 
 	//nvtxRangePop();
 }
 
-void GraphicsCore::UpdateMaterialCBs(const std::vector<RenderPacket*>& packets, int startIndex, int numToUpdate)
+void GraphicsCore::UpdateMaterialCBs(const std::vector<RenderPacket*>& packets)
 {
 	//nvtxRangePushW(L"Update MCBs");
 
-	assert(numToUpdate <= NUM_CBUFFERS);
-	auto currMaterialCB = mCurrFrameResource->MaterialCB.get();
+	assert(packets.size() <= MAX_BUFFER_COUNT);
 
+	auto currMaterialCB = mCurrFrameResource->MaterialCB.get();
 	// TODO: Insert checks/parameters for number of descriptors held by a CB.
-	size_t endIndex = size_t(startIndex) + numToUpdate < packets.size() ? startIndex + numToUpdate : packets.size();
-	for (size_t i = startIndex, cbIndex = 0; i < endIndex; ++i, ++cbIndex)
+	for (size_t bufferIndex = 0; bufferIndex < packets.size(); ++bufferIndex)
 	{
-		const Material* mat = packets[i]->Mat;
-		//if (mat->NumFramesDirty > 0)
-		//{
+		// Only update the cbuffer data if the constants have changed.  
+		// This needs to be tracked per frame resource.
+		if (packets[bufferIndex]->MaterialDirtyForFrame)
+		{
+			const Material* mat = packets[bufferIndex]->Mat;
+
 			XMMATRIX matTransform = XMLoadFloat4x4(&mat->MatTransform);
 
 			MaterialConstants matConstants;
@@ -641,10 +660,11 @@ void GraphicsCore::UpdateMaterialCBs(const std::vector<RenderPacket*>& packets, 
 			matConstants.Roughness = mat->Roughness;
 			XMStoreFloat4x4(&matConstants.MatTransform, XMMatrixTranspose(matTransform));
 
-			currMaterialCB->CopyData(cbIndex, matConstants);
+			currMaterialCB->CopyData(bufferIndex, matConstants);
 
-			//mat->NumFramesDirty--;
-		//}
+			packets[bufferIndex]->MaterialCBIndex = bufferIndex;
+			packets[bufferIndex]->MaterialDirtyForFrame = false;
+		}
 	}
 
 	//nvtxRangePop();
@@ -825,7 +845,7 @@ void GraphicsCore::BuildDescriptorHeaps()
 {
 	// The design of this system isn't fully decided,
 	// but for now the number of buffers is fixed.
-	UINT bufferCount = NUM_CBUFFERS;
+	UINT bufferCount = MAX_BUFFER_COUNT;
 
 	// Need 2 CBV descriptors for each object for each frame resource,
 	// +1 for the perPass CBV for each frame resource. The per object
@@ -860,9 +880,7 @@ void GraphicsCore::BuildDescriptorHeaps()
 // TODO: Change name BuildCBUAVSRViews (or sub components all called by BuildViews)
 void GraphicsCore::BuildConstantBufferViews()
 {
-	UINT objCount = NUM_CBUFFERS;
-
-	UINT passCBByteSize = CalcConstantBufferByteSize(sizeof(PassConstants));
+	UINT objCount = MAX_BUFFER_COUNT;
 
 	// First set of descriptors are the pass CBVs for each frame resource.
 	//for (int frameIndex = 0; frameIndex < gNumFrameResources; ++frameIndex)
@@ -877,28 +895,26 @@ void GraphicsCore::BuildConstantBufferViews()
 
 		D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc;
 		cbvDesc.BufferLocation = cbAddress;
-		cbvDesc.SizeInBytes = passCBByteSize;
+		cbvDesc.SizeInBytes = mPassCBByteSize;
 
 		md3dDevice->CreateConstantBufferView(&cbvDesc, handle);
 		handle.Offset(1, mCbvSrvUavDescriptorSize);
-		cbvDesc.BufferLocation += passCBByteSize;
+		cbvDesc.BufferLocation += mPassCBByteSize;
 		md3dDevice->CreateConstantBufferView(&cbvDesc, handle);
 
 
 	//}
 
-	UINT matCBByteSize = CalcConstantBufferByteSize(sizeof(MaterialConstants));
-
-		// Need a CBV descriptor for each object for each frame resource.
-		//for (int frameIndex = 0; frameIndex < gNumFrameResources; ++frameIndex)
-		//{
+	// Need a CBV descriptor for each object for each frame resource.
+	//for (int frameIndex = 0; frameIndex < gNumFrameResources; ++frameIndex)
+	//{
 		auto matCB = mCurrFrameResource->MaterialCB->Resource();
 		for (UINT i = 0; i < objCount; ++i)
 		{
 			D3D12_GPU_VIRTUAL_ADDRESS cbAddress = matCB->GetGPUVirtualAddress();
 
 			// Offset to the ith object constant buffer in the buffer.
-			cbAddress += i * matCBByteSize;
+			cbAddress += i * mMaterialCBByteSize;
 
 			// Offset to the object cbv in the descriptor heap.
 			int heapIndex = /*frameIndex*/(0 * objCount) + i + gNumFrameResources + 1;
@@ -907,13 +923,11 @@ void GraphicsCore::BuildConstantBufferViews()
 
 			D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc;
 			cbvDesc.BufferLocation = cbAddress;
-			cbvDesc.SizeInBytes = matCBByteSize;
+			cbvDesc.SizeInBytes = mMaterialCBByteSize;
 
 			md3dDevice->CreateConstantBufferView(&cbvDesc, handle);
 		}
-		//}
-
-	UINT objCBByteSize = CalcConstantBufferByteSize(sizeof(ObjectConstants));
+	//}
 
 	// Need a CBV descriptor for each object for each frame resource.
 	//for (int frameIndex = 0; frameIndex < gNumFrameResources; ++frameIndex)
@@ -924,7 +938,7 @@ void GraphicsCore::BuildConstantBufferViews()
 			D3D12_GPU_VIRTUAL_ADDRESS cbAddress = objectCB->GetGPUVirtualAddress();
 
 			// Offset to the ith object constant buffer in the buffer.
-			cbAddress += i*objCBByteSize;
+			cbAddress += i * mObjectCBByteSize;
 
 			// Offset to the object cbv in the descriptor heap.
 			int heapIndex = /*frameIndex*/ objCount + i + gNumFrameResources + 1;
@@ -933,7 +947,7 @@ void GraphicsCore::BuildConstantBufferViews()
 
 			D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc;
 			cbvDesc.BufferLocation = cbAddress;
-			cbvDesc.SizeInBytes = objCBByteSize;
+			cbvDesc.SizeInBytes = mObjectCBByteSize;
 
 			md3dDevice->CreateConstantBufferView(&cbvDesc, handle);
 		}
@@ -982,7 +996,7 @@ void GraphicsCore::BuildConstantBufferViews()
 // TODO: Refactor this into something reusable
 void GraphicsCore::BuildPSOs()
 {
-	mPSOs.resize(NamedPSO::Count);
+	mPSOs.resize(NamedPSO::COUNT);
 
 	// PSO for standard opaque objects.
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC opaquePsoDesc;
@@ -1106,70 +1120,21 @@ void GraphicsCore::BuildFrameResources()
 	//for (int i = 0; i < gNumFrameResources; ++i)
 	//{
 		mCurrFrameResource = new FrameResource(md3dDevice.Get(),
-		2, (UINT)NUM_CBUFFERS, MAX_LIGHTS); // TODO: Test 1 vs 2 pass CB for shadows
+		2, (UINT)MAX_BUFFER_COUNT, MAX_LIGHTS); // TODO: Test 1 vs 2 pass CB for shadows (i.e. the same pass buffer)
 	//}
 }
 
-void GraphicsCore::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, ID3D12CommandAllocator* listAlloc, const std::vector<RenderPacket*>& ritems, bool isShadowMap)
+void GraphicsCore::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, ID3D12CommandAllocator* listAlloc, const RenderLayer renderLayer, const bool isShadowMap)
 {
 	//nvtxRangePushW(L"Draw Items");
 
-	//UINT objCBByteSize = CalcConstantBufferByteSize(sizeof(ObjectConstants));
-
-	//auto objectCB = mCurrFrameResource->ObjectCB->Resource();
-
-	// For each render item...
 	NamedPSO activePSO = NamedPSO::NONE;
-	for (size_t i = 0; i < ritems.size(); ++i)
+	for (size_t i = 0; i < mRenderPacketLayers[renderLayer].size(); ++i)
 	{
-		if (i % NUM_CBUFFERS == 0)
-		{
-			// NOTE: Highly subject to change, so this is left fairly messy for now.
-			
-			// We will be updating the CBs on the GPU, so execute previous commands
-			// which rely on the current values first.
-			if (i != 0)
-			{
-				ASSERT_HR(cmdList->Close());
-				ID3D12CommandList* cmdsLists[] = { cmdList };
-				mCommandQueue->ExecuteCommandLists(_countof(cmdsLists), cmdsLists);
-
-
-				FlushCommandQueue();
-				ASSERT_HR(listAlloc->Reset()); // Optional, if we don't wan't the memory back
-
-				// A command list can be reset after it has been added to the command queue via ExecuteCommandList.
-				// Reusing the command list reuses memory.
-				if (mIsWireframe)
-				{
-					activePSO = NamedPSO::Default_WF;
-					ASSERT_HR(cmdList->Reset(listAlloc, mPSOs[activePSO].Get()));
-				}
-				else
-				{
-					activePSO = NamedPSO::Default;
-					ASSERT_HR(cmdList->Reset(listAlloc, mPSOs[activePSO].Get()));
-				}
-			}
-
-			UpdateObjectCBs(ritems, i, NUM_CBUFFERS);
-			UpdateMaterialCBs(ritems, i, NUM_CBUFFERS);
-
-			// TODO: May need to pass in some sort of render state object for reseting state after command list execution.
-			//cmdList->RSSetViewports(1, &mScreenViewport);
-			//cmdList->RSSetScissorRects(1, &mScissorRect);
-
-			// TODO: Encapsulate and pass desired RTV and DSV in a class
-			// Specify the buffers we are going to render to.
-			//cmdList->OMSetRenderTargets(1, &CurrentBackBufferView(), true, &DepthStencilView());
-
-			// We can now specify all of the drawing related commands.
-		}
-
 		// Set PSO required to draw the object
 		// TODO: Consolodate
-		auto ri = ritems[i];
-		NamedPSO targetPSO = ri->PSO;
+		auto renderPacket = mRenderPacketLayers[renderLayer][i];
+		NamedPSO targetPSO = renderPacket->PSO;
 		if (mIsWireframe)
 			targetPSO = static_cast<NamedPSO>(static_cast<int>(targetPSO) + 1);
 		if (targetPSO != activePSO)
@@ -1185,9 +1150,9 @@ void GraphicsCore::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, ID3D12Com
 
 		// TODO: This should be refactored to consider that the buffers for the same mesh will be the same.
 		//			- Consider sorting objects by shader used, then by mesh.
-		cmdList->IASetVertexBuffers(0, 1, &ri->Geo->VertexBufferView());
-		cmdList->IASetIndexBuffer(&ri->Geo->IndexBufferView());
-		cmdList->IASetPrimitiveTopology(ri->PrimitiveType);
+		cmdList->IASetVertexBuffers(0, 1, &renderPacket->Geo->VertexBufferView());
+		cmdList->IASetIndexBuffer(&renderPacket->Geo->IndexBufferView());
+		cmdList->IASetPrimitiveTopology(renderPacket->PrimitiveType);
 
 		//cmdList->SetGraphicsRootSignature(mRootSignature.Get());
 
@@ -1199,15 +1164,20 @@ void GraphicsCore::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, ID3D12Com
 		//passCbvHandle.Offset(passCbvIndex, mCbvSrvUavDescriptorSize);
 		//cmdList->SetGraphicsRootDescriptorTable(0, passCbvHandle);
 
+		// TODO: Test Vs
+		//         D3D12_GPU_VIRTUAL_ADDRESS objCBAddress = objectCB->GetGPUVirtualAddress() + ri->ObjCBIndex*objCBByteSize;
+
 		// Offset to the CBV in the descriptor heap for this object's material and for this frame resource.
-		UINT cbvIndex = /*mCurrFrameResourceIndex*//*0*(UINT)mOpaqueRenderPackets.size() + */(i % NUM_CBUFFERS) + gNumFrameResources + 1;
+		UINT cbvIndex = /*mCurrFrameResourceIndex*//*0*(UINT)mOpaqueRenderPackets.size() + */renderPacket->ObjectCBIndex + gNumFrameResources + 1;
 		auto cbvHandle = CD3DX12_GPU_DESCRIPTOR_HANDLE(mCbvHeap->GetGPUDescriptorHandleForHeapStart());
 		cbvHandle.Offset(cbvIndex, mCbvSrvUavDescriptorSize);
 
+		// TODO: Wrap root signature sets into managing class
 		cmdList->SetGraphicsRootDescriptorTable(1, cbvHandle);
 
+		// TODO: Fix to putting passCB index after all objects and materials
 		// Offset to the CBV in the descriptor heap for this object and for this frame resource.
-		cbvIndex = /*mCurrFrameResourceIndex*//*0*(UINT)mOpaqueRenderPackets.size() + */(i % NUM_CBUFFERS) + NUM_CBUFFERS + gNumFrameResources + 1; // TODO: Refacor index location into either a class or utility helper method
+		cbvIndex = /*mCurrFrameResourceIndex*//*0*(UINT)mOpaqueRenderPackets.size() + */renderPacket->MaterialCBIndex + MAX_BUFFER_COUNT + gNumFrameResources + 1; // TODO: Refacor index location into either a class or utility helper method
 		cbvHandle = CD3DX12_GPU_DESCRIPTOR_HANDLE(mCbvHeap->GetGPUDescriptorHandleForHeapStart());
 		cbvHandle.Offset(cbvIndex, mCbvSrvUavDescriptorSize);
 
@@ -1218,7 +1188,7 @@ void GraphicsCore::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, ID3D12Com
 
 		// TODO: REMOVE normal map index if it will always be adjacent, or add toggleable support for disparate locations
 		CD3DX12_GPU_DESCRIPTOR_HANDLE tex(mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
-		tex.Offset(ri->Mat->DiffuseSrvHeapIndex, mCbvSrvUavDescriptorSize);
+		tex.Offset(renderPacket->Mat->DiffuseSrvHeapIndex, mCbvSrvUavDescriptorSize);
 
 		if (activePSO < NamedPSO::SkyMap)
 			cmdList->SetGraphicsRootDescriptorTable(3, tex);
@@ -1237,10 +1207,8 @@ void GraphicsCore::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, ID3D12Com
 
 		cmdList->SetGraphicsRootShaderResourceView(5, mCurrFrameResource->LightSB.get()->Resource()->GetGPUVirtualAddress());
 
-		cmdList->DrawIndexedInstanced(ri->IndexCount, 1, ri->StartIndexLocation, ri->BaseVertexLocation, 0);
+		cmdList->DrawIndexedInstanced(renderPacket->IndexCount, 1, renderPacket->StartIndexLocation, renderPacket->BaseVertexLocation, 0);
 	}
-
-	// TODO: Clean command list by executing commands before exiting?
 
 	//nvtxRangePop();
 }
@@ -1307,8 +1275,8 @@ void GraphicsCore::BuildShadersAndInputLayout()
 		NULL, NULL
 	};
 
-	mShaders["standardVS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "VS", "vs_5_1");
-	mShaders["opaquePS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "PS", "ps_5_1");
+	mShaders["standardVS"] = CompileShader(L"Shaders\\Default.hlsl", shadowMappingDefines, "VS", "vs_5_1");
+	mShaders["opaquePS"] = CompileShader(L"Shaders\\Default.hlsl", shadowMappingDefines, "PS", "ps_5_1");
 	mShaders["standardNormMapVS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "VS_NormalMapped", "vs_5_1");
 	mShaders["opaqueNormMapPS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "PS_NormalMapped", "ps_5_1");
 
@@ -1429,7 +1397,7 @@ void GraphicsCore::LoadTextures(std::vector<Texture*>& texes)
 void GraphicsCore::SubmitSceneTextures(std::vector<Texture*>& texes, std::vector<short>& viewIndicies)
 {
 	// Temporary for now, since descriptors are set statically
-	assert(texes.size() <= NUM_CBUFFERS);
+	assert(texes.size() <= MAX_BUFFER_COUNT);
 
 	ASSERT_HR(mCommandList->Reset(mDirectCmdListAlloc.Get(), nullptr));
 

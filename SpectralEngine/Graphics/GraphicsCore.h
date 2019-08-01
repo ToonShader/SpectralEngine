@@ -29,7 +29,6 @@
 
 extern const int gNumFrameResources;
 
-
 namespace Spectral
 {
 	namespace Graphics
@@ -42,6 +41,7 @@ namespace Spectral
 			// For now, this class is a singleton until I work on a better
 			// way to manage core D3D control with concurrent threads.
 			GraphicsCore();
+			GraphicsCore(UINT maxNumberOfObjects);
 			/*virtual */~GraphicsCore();
 
 			GraphicsCore(const GraphicsCore& copy) = delete;
@@ -52,13 +52,13 @@ namespace Spectral
 			static bool DestroyGraphicsCoreInstance();
 			// Potential Feature: Support runtime switching of render window
 
-			void SubmitRenderPackets(const std::vector<RenderPacket*>& packets /* SOME ENUM HERE FOR PSO?? */);
+			void SubmitRenderPackets(const std::vector<RenderPacket*>& packets, RenderLayer renderLayer);
 			void SubmitSceneLights(const std::vector<Light>& lights, int beg, int end);
 			// /*virtual*/ LRESULT MsgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 			/*virtual*/ void RenderPrePass(/*const Timer& gt*/); /*= 0;*/
 			/*virtual*/ void Render(/*const Timer& gt*/); /*= 0;*/
-			void testrender(const Camera& camera);
-			void RenderShadowMaps();
+			void UpdateScene();
+			void RenderScene(const Camera& camera);
 			// TODO: Accessors for settings screen states
 
 			Microsoft::WRL::ComPtr<ID3D12Resource> CreateDefaultBuffer(/*ID3D12Device* device, ID3D12GraphicsCommandList* cmdList,*/
@@ -85,7 +85,6 @@ namespace Spectral
 		private:
 			/*virtual*/ bool Initialize();
 			/*virtual*/ void ResizeWindow();
-			// /*virtual*/ void Update(const Timer& gt); /*= 0;*/
 
 			bool InitDirect3D();
 			// IMPROVEMENT: Eventually command entities will be abstracted to a manager class
@@ -97,12 +96,13 @@ namespace Spectral
 			void BuildConstantBufferViews();
 			void BuildPSOs();
 			void BuildFrameResources();
-			FrameResource* mCurrFrameResource = nullptr;
-			void DrawRenderItems(ID3D12GraphicsCommandList* cmdList, ID3D12CommandAllocator* listAlloc, const std::vector<RenderPacket*>& ritems, bool isShadowMap = false);
+			void DrawRenderItems(ID3D12GraphicsCommandList* cmdList, ID3D12CommandAllocator* listAlloc, RenderLayer renderLayer, bool isShadowMap);
+			// It might be useful in the future to expose this
+			void RenderShadowMaps(ID3D12CommandAllocator* cmdListAllocator);
 
 			void UpdateMainPassCB();
-			void UpdateObjectCBs(const std::vector<RenderPacket*>& packets, int startIndex, int numToUpdate);
-			void UpdateMaterialCBs(const std::vector<RenderPacket*>& packets, int startIndex, int numToUpdate);
+			void UpdateObjectCBs(const std::vector<RenderPacket*>& packets);
+			void UpdateMaterialCBs(const std::vector<RenderPacket*>& packets);
 			void UpdateShadowPassCB(const DepthStencilBuffer::ShadowMap& map); // TODO: Move
 			void UpdateLightSRV(const std::vector<Light>& lights, int startIndex, int numToUpdate);
 
@@ -135,6 +135,12 @@ namespace Spectral
 			//bool      m4xMsaaState = false;
 			//UINT      m4xMsaaQuality = 0;
 
+			const UINT MAX_BUFFER_COUNT = 4096;
+			const UINT mObjectCBByteSize = CalcConstantBufferByteSize(sizeof(ObjectConstants));
+			const UINT mMaterialCBByteSize = CalcConstantBufferByteSize(sizeof(MaterialConstants));
+			const UINT mPassCBByteSize = CalcConstantBufferByteSize(sizeof(PassConstants));
+
+			FrameResource* mCurrFrameResource = nullptr;
 
 			Microsoft::WRL::ComPtr<IDXGIFactory4> mdxgiFactory;
 			Microsoft::WRL::ComPtr<IDXGISwapChain1> mSwapChain;
@@ -165,10 +171,8 @@ namespace Spectral
 
 			std::vector<D3D12_INPUT_ELEMENT_DESC> mInputLayout;
 
-			std::vector<RenderPacket*> mAllRenderPackets; // TODO: Convert to render layer
-
-			// Render packets will eventually be separated by required PSO and other attributes
-			std::vector<RenderPacket*> mOpaqueRenderPackets;
+			// TODO: Could make it a map of vectors, keyed by PSO. Might create issues with draw order down the line.
+			std::array<std::vector<RenderPacket*>, RenderLayer::COUNT> mRenderPacketLayers;
 
 			PassConstants mMainPassCB;
 			PassConstants mShadowPassCB;

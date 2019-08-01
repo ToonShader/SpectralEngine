@@ -8,14 +8,65 @@
 
 extern const int gNumFrameResources;
 
-// Shaders are always in pairs of 2
-enum NamedPSO { Default, Default_WF, NormalMap, NormalMap_WF, NormalWithShadowMap, ShadowMap, SkyMap, SkyMap_WF, Count, NONE}; // TODO: Add more shadow variations? Fix format/order
+// Defines the set of Pixel Shader Objects,
+// which correspond to the desired shading technique.
+struct _NamedPSO
+{
+	_NamedPSO() = delete;
+
+	// TODO: Remove wireframe for map at runtime
+	enum Value : int
+	{
+		Default = 0,
+		Default_WF,
+		NormalMap,
+		NormalMap_WF,
+		NormalWithShadowMap,
+		ShadowMap, // TODO: Delete
+		SkyMap,
+		SkyMap_WF,
+		COUNT,
+		NONE
+	};
+};// TODO: Add more shadow variations
+typedef typename _NamedPSO::Value NamedPSO;
+
+// For future shader refactor
+struct _InternalPSO
+{
+	_InternalPSO() = delete;
+
+	enum Value : int
+	{
+		ShadowMap
+	};
+};
+
+struct _RenderLayer
+{
+	_RenderLayer() = delete;
+
+	enum Value : int
+	{
+		ALL = 0,
+		Opaque,
+		Sky,
+		Debug,
+		COUNT,
+		NONE
+	};
+};
+typedef typename _RenderLayer::Value RenderLayer;
 
 struct RenderPacket
 {
-	// Not currently used as I don't like the dependencies it creates.
+	// TODO: Maybe
+	//RenderPacket() = default;
+	//RenderPacket(const RenderItem& rhs) = delete;
+
 	// Index into GPU constant buffer this packet is written into.
-	//UINT ObjCBIndex = -1;
+	UINT ObjectCBIndex = -1;
+	UINT MaterialCBIndex = -1;
 
 	DirectX::XMFLOAT4X4 World = Spectral::Math::XMF4x4Identity();
 	XMFLOAT4X4 TexTransform = Spectral::Math::XMF4x4Identity();
@@ -35,8 +86,8 @@ struct RenderPacket
 
 	D3D12_PRIMITIVE_TOPOLOGY PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 
-	// For potential later functionality
-	// int NumFramesDirty = gNumFrameResources;
+	bool ObjectDirtyForFrame = true;
+	bool MaterialDirtyForFrame = true;
 
 	// Global bounds for all geometry in the packet
 	DirectX::BoundingBox Bounds;

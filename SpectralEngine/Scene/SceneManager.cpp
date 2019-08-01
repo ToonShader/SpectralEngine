@@ -57,6 +57,7 @@ void SceneManager::Initialize(Spectral::Graphics::GraphicsCore* graphicsCore)
 	////mLights[2].Strength = { 0.2f, 0.2f, 0.2f };
 
 	// AmbientLight = { 0.25f, 0.25f, 0.35f, 1.0f };
+	//mLights[0].Direction = { 0.57735f, -0.57735f, 0.57735f }; // TODO: Use this direction to resolve some edge cases in testing
 	XMStoreFloat3(&mLights[0].Direction, XMVector3Normalize({ 10.57735f, -15.57735f, 7.57735f })); //{ 0.57735f, -0.57735f, 0.57735f };
 	mLights[0].Strength = { 1.0f, 1.0f, 1.0f };
 	//mLights[1].Direction = { -0.57735f, -0.57735f, 0.57735f };
@@ -164,11 +165,13 @@ void SceneManager::UpdateScene(float dt)
 			mEditingAxis[i]->World._43 = mActiveObject->World._43;
 		}
 	}
+
+	mGraphicsCore->UpdateScene();
 }
 
 void SceneManager::DrawScene()
 {
-	mGraphicsCore->testrender(mSceneCamera);
+	mGraphicsCore->RenderScene(mSceneCamera);
 }
 
 void SceneManager::Destroy()
@@ -422,7 +425,10 @@ void SceneManager::BuildRenderItems()
 		mAllRitems.push_back(std::move(z_axis));
 	}
 
+	mGraphicsCore->SubmitRenderPackets(packets, RenderLayer::Opaque);
+
 	// Add the sky sphere last
+	packets.clear();
 	auto skyRitem = std::make_unique<RenderPacket>();
 	XMStoreFloat4x4(&skyRitem->World, XMMatrixScaling(5000.0f, 5000.0f, 5000.0f));
 	skyRitem->Mat = mMaterials["sky"].get();
@@ -436,7 +442,7 @@ void SceneManager::BuildRenderItems()
 	packets.push_back(skyRitem.get());
 	mAllRitems.push_back(std::move(skyRitem));
 
-	mGraphicsCore->SubmitRenderPackets(packets);
+	mGraphicsCore->SubmitRenderPackets(packets, RenderLayer::Sky);
 
 	mActiveObject = mAllRitems.begin()->get();
 }
@@ -585,7 +591,7 @@ void SceneManager::AddObject(const std::string& object, const std::string& mater
 	mActiveObject = axis_set.get();
 	mAllRitems.push_back(std::move(axis_set));
 
-	mGraphicsCore->SubmitRenderPackets(packets);
+	mGraphicsCore->SubmitRenderPackets(packets, RenderLayer::Opaque);
 }
 
 void SceneManager::AddObject(const RenderPacket* const packet)
@@ -599,7 +605,7 @@ void SceneManager::AddObject(const RenderPacket* const packet)
 	mActiveObject = newPacket.get();
 	mAllRitems.push_back(std::move(newPacket));
 
-	mGraphicsCore->SubmitRenderPackets(packets);
+	mGraphicsCore->SubmitRenderPackets(packets, RenderLayer::Opaque);
 }
 
 void SceneManager::Resize(int clientWidth, int clientHeight)

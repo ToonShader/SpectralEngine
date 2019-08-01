@@ -141,7 +141,7 @@ void DepthStencilBuffer::UpdateShadowTransform(const DirectionalLight& dirLight,
 {
 	// Only the first "main" light casts a shadow.
 	XMVECTOR lightDir = XMLoadFloat3(&dirLight.Direction);
-	XMVECTOR lightPos = (-1.0f * bounds.Radius * lightDir) + XMLoadFloat3(&bounds.Center); // TODO: Why -2?
+	XMVECTOR lightPos = (-2.0f * bounds.Radius * lightDir) + XMLoadFloat3(&bounds.Center);
 	XMVECTOR targetPos = XMLoadFloat3(&bounds.Center);
 	XMVECTOR lightUp = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
 	XMMATRIX lightView = XMMatrixLookAtLH(lightPos, targetPos, lightUp);
