@@ -228,6 +228,7 @@ void SceneManager::BuildShapeGeometry()
 
 void SceneManager::BuildRenderItems()
 {
+	// For generating objects at runtime...
 	//for (auto& geo : mGeometries["shapeGep"]->DrawArgs)
 	//{
 	//	auto packet = std::make_unique<RenderPacket>();
@@ -244,33 +245,11 @@ void SceneManager::BuildRenderItems()
 	//}
 
 
-	auto boxRitem = std::make_unique<RenderPacket>();
-	XMStoreFloat4x4(&boxRitem->World, XMMatrixScaling(2.0f, 2.0f, 2.0f)*XMMatrixTranslation(0.0f, 1.0f, 0.0f));
-	//XMStoreFloat4x4(&boxRitem->TexTransform, XMMatrixScaling(1.3f, 1.3f, 1.3f));
-	//boxRitem->ObjCBIndex = 0;
-	boxRitem->Mat = mMaterials["stone0"].get();
-	boxRitem->Geo = mGeometries["shapeGeo"].get();
-	boxRitem->PSO = NamedPSO::Default;
-	boxRitem->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
-	boxRitem->IndexCount = boxRitem->Geo->DrawArgs["box"].IndexCount;
-	boxRitem->StartIndexLocation = boxRitem->Geo->DrawArgs["box"].StartIndexLocation;
-	boxRitem->BaseVertexLocation = boxRitem->Geo->DrawArgs["box"].BaseVertexLocation;
-	boxRitem->Bounds = boxRitem->Geo->DrawArgs["box"].Bounds;
-	mAllRitems.push_back(std::move(boxRitem));
+	//mAllRitems.push_back(BuildBox(XMMatrixScaling(2.0f, 2.0f, 2.0f)*XMMatrixTranslation(0.0f, 1.0f, 0.0f), XMMatrixScaling(1.3f, 1.3f, 1.3f)));
+	mAllRitems.push_back(BuildBox(XMMatrixScaling(2.0f, 2.0f, 2.0f)*XMMatrixTranslation(0.0f, 1.0f, 0.0f)));
+	mRenderPacketLayers[NamedPSO::DefaultWithShadows].push_back(mAllRitems.back().get());
 
-	auto gridRitem = std::make_unique<RenderPacket>();
-	gridRitem->World = Spectral::Math::XMF4x4Identity();
-	XMStoreFloat4x4(&gridRitem->TexTransform, XMMatrixScaling(8.0f, 8.0f, 1.0f));
-	//XMStoreFloat4x4(&gridRitem->TexTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
-	//gridRitem->ObjCBIndex = 1;
-	gridRitem->Mat = mMaterials["tile0"].get();
-	gridRitem->Geo = mGeometries["shapeGeo"].get();
-	gridRitem->PSO = NamedPSO::NormalWithShadowMap;
-	gridRitem->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
-	gridRitem->IndexCount = gridRitem->Geo->DrawArgs["grid"].IndexCount;
-	gridRitem->StartIndexLocation = gridRitem->Geo->DrawArgs["grid"].StartIndexLocation;
-	gridRitem->BaseVertexLocation = gridRitem->Geo->DrawArgs["grid"].BaseVertexLocation;
-	gridRitem->Bounds = gridRitem->Geo->DrawArgs["grid"].Bounds;
+	auto gridRitem = BuildGrid(XMMatrixIdentity(), XMMatrixScaling(8.0f, 8.0f, 1.0f));
 
 	auto leftWallRItem = std::make_unique<RenderPacket>();
 	(*leftWallRItem) = (*gridRitem);
@@ -295,154 +274,110 @@ void SceneManager::BuildRenderItems()
 	XMStoreFloat4x4(&frontWallRItem->TexTransform, XMMatrixRotationZ(0)*XMMatrixScaling(2.0f, 2.0f, 2.0f));
 	XMStoreFloat4x4(&backWallRItem->TexTransform, XMMatrixRotationZ(0)*XMMatrixScaling(2.0f, 2.0f, 2.0f));
 
-
 	mAllRitems.push_back(std::move(gridRitem));
+	mRenderPacketLayers[NamedPSO::NormalMapWithShadows].push_back(mAllRitems.back().get());
 	//mAllRitems.push_back(std::move(leftWallRItem));
+	//mRenderPacketLayers[NamedPSO::NormalMapWithShadows].push_back(mAllRitems.back().get());
 	//mAllRitems.push_back(std::move(rightWallRItem));
+	//mRenderPacketLayers[NamedPSO::NormalMapWithShadows].push_back(mAllRitems.back().get());
 	//mAllRitems.push_back(std::move(frontWallRItem));
+	//mRenderPacketLayers[NamedPSO::NormalMapWithShadows].push_back(mAllRitems.back().get());
 	//mAllRitems.push_back(std::move(backWallRItem));
+	//mRenderPacketLayers[NamedPSO::NormalMapWithShadows].push_back(mAllRitems.back().get());
 
-	XMMATRIX brickTexTransform = XMMatrixScaling(1.0f, 1.0f, 1.0f);
-	UINT objCBIndex = 2;
 	for (int i = 0; i < 5; ++i)
 	{
-		auto leftCylRitem = std::make_unique<RenderPacket>();
-		auto rightCylRitem = std::make_unique<RenderPacket>();
-		auto leftSphereRitem = std::make_unique<RenderPacket>();
-		auto rightSphereRitem = std::make_unique<RenderPacket>();
+		mAllRitems.push_back(BuildColumn(XMMatrixTranslation(-5.0f, 1.5f, -10.0f + i * 5.0f)));
+		mRenderPacketLayers[NamedPSO::NormalMapWithShadows].push_back(mAllRitems.back().get());
+		mAllRitems.push_back(BuildColumn(XMMatrixTranslation(+5.0f, 1.5f, -10.0f + i * 5.0f)));
+		mRenderPacketLayers[NamedPSO::NormalMapWithShadows].push_back(mAllRitems.back().get());
 
-		XMMATRIX leftCylWorld = XMMatrixTranslation(-5.0f, 1.5f, -10.0f + i * 5.0f);
-		XMMATRIX rightCylWorld = XMMatrixTranslation(+5.0f, 1.5f, -10.0f + i * 5.0f);
-
-		XMMATRIX leftSphereWorld = XMMatrixTranslation(-5.0f, 3.5f, -10.0f + i * 5.0f);
-		XMMATRIX rightSphereWorld = XMMatrixTranslation(+5.0f, 3.5f, -10.0f + i * 5.0f);
-
-		XMStoreFloat4x4(&leftCylRitem->World, rightCylWorld);
-		XMStoreFloat4x4(&leftCylRitem->TexTransform, brickTexTransform);
-		//leftCylRitem->ObjCBIndex = objCBIndex++;
-		leftCylRitem->Mat = mMaterials["bricks0"].get();
-		leftCylRitem->Geo = mGeometries["shapeGeo"].get();
-		leftCylRitem->PSO = NamedPSO::NormalWithShadowMap;
-		leftCylRitem->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
-		leftCylRitem->IndexCount = leftCylRitem->Geo->DrawArgs["cylinder"].IndexCount;
-		leftCylRitem->StartIndexLocation = leftCylRitem->Geo->DrawArgs["cylinder"].StartIndexLocation;
-		leftCylRitem->BaseVertexLocation = leftCylRitem->Geo->DrawArgs["cylinder"].BaseVertexLocation;
-		leftCylRitem->Bounds = leftCylRitem->Geo->DrawArgs["cylinder"].Bounds;
-
-		*rightCylRitem = *leftCylRitem;
-		XMStoreFloat4x4(&rightCylRitem->World, leftCylWorld);
-		XMStoreFloat4x4(&rightCylRitem->TexTransform, brickTexTransform);
-
-		XMStoreFloat4x4(&leftSphereRitem->World, leftSphereWorld);
-		leftSphereRitem->TexTransform = Spectral::Math::XMF4x4Identity();
-		//leftSphereRitem->ObjCBIndex = objCBIndex++;
-		leftSphereRitem->Mat = mMaterials["stone0"].get();
-		leftSphereRitem->Geo = mGeometries["shapeGeo"].get();
-		leftSphereRitem->PSO = NamedPSO::Default;
-		leftSphereRitem->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
-		leftSphereRitem->IndexCount = leftSphereRitem->Geo->DrawArgs["sphere"].IndexCount;
-		leftSphereRitem->StartIndexLocation = leftSphereRitem->Geo->DrawArgs["sphere"].StartIndexLocation;
-		leftSphereRitem->BaseVertexLocation = leftSphereRitem->Geo->DrawArgs["sphere"].BaseVertexLocation;
-		leftSphereRitem->Bounds = leftSphereRitem->Geo->DrawArgs["sphere"].Bounds;
-
-		*rightSphereRitem = *leftSphereRitem;
-		XMStoreFloat4x4(&rightSphereRitem->World, rightSphereWorld);
-		rightSphereRitem->TexTransform = Spectral::Math::XMF4x4Identity();
-
-		mAllRitems.push_back(std::move(leftCylRitem));
-		mAllRitems.push_back(std::move(rightCylRitem));
-		mAllRitems.push_back(std::move(leftSphereRitem));
-		mAllRitems.push_back(std::move(rightSphereRitem));
+		mAllRitems.push_back(BuildSphere(XMMatrixTranslation(-5.0f, 3.5f, -10.0f + i * 5.0f)));
+		mRenderPacketLayers[NamedPSO::DefaultWithShadows].push_back(mAllRitems.back().get());
+		mAllRitems.push_back(BuildSphere(XMMatrixTranslation(+5.0f, 3.5f, -10.0f + i * 5.0f)));
+		mRenderPacketLayers[NamedPSO::DefaultWithShadows].push_back(mAllRitems.back().get());
 	}
-
-
-	// All the render items are opaque.
-	std::vector<RenderPacket*> packets;
-	for (auto& e : mAllRitems)
-		packets.push_back(e.get());
 
 	// Quick and dirty way to duplicate the scene on the X and Z axis
-	for (RenderPacket* packet : packets)
+	std::vector<RenderPacket*> newDefaultPackets;
+	std::vector<RenderPacket*> newNormalPackets;
+	for (int i = -4; i < 5; ++i)
 	{
-		for (int i = -4; i < 5; ++i)
-		{
-			if (i == 0)
-				continue;
+		if (i == 0)
+			continue;
 
-			auto temp = std::make_unique<RenderPacket>();
-			*temp = *packet;
-			XMStoreFloat4x4(&temp->World, XMLoadFloat4x4(&temp->World)*XMMatrixTranslation(30.0f * i, 0.0f, 0.0f));
-			mAllRitems.push_back(std::move(temp));
+		for (RenderPacket* packet : mRenderPacketLayers[NamedPSO::DefaultWithShadows])
+		{
+			auto newPacket = std::make_unique<RenderPacket>();
+			*newPacket = *packet;
+			XMStoreFloat4x4(&newPacket->World, XMLoadFloat4x4(&newPacket->World)*XMMatrixTranslation(30.0f * i, 0.0f, 0.0f));
+			mAllRitems.push_back(std::move(newPacket));
+			newDefaultPackets.push_back(mAllRitems.back().get());
+		}
+		for (RenderPacket* packet : mRenderPacketLayers[NamedPSO::NormalMapWithShadows])
+		{
+			auto newPacket = std::make_unique<RenderPacket>();
+			*newPacket = *packet;
+			XMStoreFloat4x4(&newPacket->World, XMLoadFloat4x4(&newPacket->World)*XMMatrixTranslation(30.0f * i, 0.0f, 0.0f));
+			mAllRitems.push_back(std::move(newPacket));
+			newNormalPackets.push_back(mAllRitems.back().get());
 		}
 	}
-	packets.clear();
-	for (auto& e : mAllRitems)
-		packets.push_back(e.get());
+	mRenderPacketLayers[NamedPSO::DefaultWithShadows].insert(mRenderPacketLayers[NamedPSO::DefaultWithShadows].end(), newDefaultPackets.begin(), newDefaultPackets.end());
+	mRenderPacketLayers[NamedPSO::NormalMapWithShadows].insert(mRenderPacketLayers[NamedPSO::NormalMapWithShadows].end(), newNormalPackets.begin(), newNormalPackets.end());
 
-	for (RenderPacket* packet : packets)
+	newDefaultPackets.clear();
+	newNormalPackets.clear();
+	for (int i = -4; i < 5; ++i)
 	{
-		for (int i = -4; i < 5; ++i)
-		{
-			if (i == 0)
-				continue;
+		if (i == 0)
+			continue;
 
-			auto temp = std::make_unique<RenderPacket>();
-			*temp = *packet;
-			XMStoreFloat4x4(&temp->World, XMLoadFloat4x4(&temp->World)*XMMatrixTranslation(0.0f, 0.0f, 30.0f * i));
-			mAllRitems.push_back(std::move(temp));
+		for (RenderPacket* packet : mRenderPacketLayers[NamedPSO::DefaultWithShadows])
+		{
+			auto newPacket = std::make_unique<RenderPacket>();
+			*newPacket = *packet;
+			XMStoreFloat4x4(&newPacket->World, XMLoadFloat4x4(&newPacket->World)*XMMatrixTranslation(0.0f, 0.0f, 30.0f * i));
+			mAllRitems.push_back(std::move(newPacket));
+			newDefaultPackets.push_back(mAllRitems.back().get());
+		}
+		for (RenderPacket* packet : mRenderPacketLayers[NamedPSO::NormalMapWithShadows])
+		{
+			auto newPacket = std::make_unique<RenderPacket>();
+			*newPacket = *packet;
+			XMStoreFloat4x4(&newPacket->World, XMLoadFloat4x4(&newPacket->World)*XMMatrixTranslation(0.0f, 0.0f, 30.0f * i));
+			mAllRitems.push_back(std::move(newPacket));
+			newNormalPackets.push_back(mAllRitems.back().get());
 		}
 	}
-	packets.clear();
-	for (auto& e : mAllRitems)
-		packets.push_back(e.get());
+	mRenderPacketLayers[NamedPSO::DefaultWithShadows].insert(mRenderPacketLayers[NamedPSO::DefaultWithShadows].end(), newDefaultPackets.begin(), newDefaultPackets.end());
+	mRenderPacketLayers[NamedPSO::NormalMapWithShadows].insert(mRenderPacketLayers[NamedPSO::NormalMapWithShadows].end(), newNormalPackets.begin(), newNormalPackets.end());
 
+	// Add the sky sphere last
+	mAllRitems.push_back(BuildSky(XMMatrixScaling(5000.0f, 5000.0f, 5000.0f)));
+	mRenderPacketLayers[NamedPSO::SkyMap].push_back(mAllRitems.back().get());
 	if (mEditing)
 	{
 		// A coordinate axis for editing
-		auto x_axis = std::make_unique<RenderPacket>();
-		x_axis->Mat = mMaterials["default"].get();
-		x_axis->Geo = mGeometries["shapeGeo"].get();
-		x_axis->PSO = NamedPSO::Default;
-		x_axis->IndexCount = x_axis->Geo->DrawArgs["axis_arrow"].IndexCount;
-		x_axis->StartIndexLocation = x_axis->Geo->DrawArgs["axis_arrow"].StartIndexLocation;
-		x_axis->BaseVertexLocation = x_axis->Geo->DrawArgs["axis_arrow"].BaseVertexLocation;
-		x_axis->Bounds = x_axis->Geo->DrawArgs["axis_arrow"].Bounds;
-
-		auto y_axis = std::make_unique<RenderPacket>();
-		auto z_axis = std::make_unique<RenderPacket>();
-		*y_axis = *z_axis = *x_axis;
-		XMStoreFloat4x4(&y_axis->World, XMMatrixRotationZ(XM_PI / 2.0f));
-		XMStoreFloat4x4(&z_axis->World, XMMatrixRotationY(XM_PI / -2.0f));
+		auto x_axis = BuildRenderPacket("axis_arrow", "default");
+		auto y_axis = BuildRenderPacket("axis_arrow", "default", XMMatrixRotationZ(XM_PI / 2.0f));
+		auto z_axis = BuildRenderPacket("axis_arrow", "default", XMMatrixRotationY(XM_PI / -2.0f));
 
 		mEditingAxis[0] = x_axis.get();
 		mEditingAxis[1] = y_axis.get();
 		mEditingAxis[2] = z_axis.get();
-		packets.push_back(x_axis.get());
-		packets.push_back(y_axis.get());
-		packets.push_back(z_axis.get());
+		mRenderPacketLayers[NamedPSO::Debug].push_back(x_axis.get());
+		mRenderPacketLayers[NamedPSO::Debug].push_back(y_axis.get());
+		mRenderPacketLayers[NamedPSO::Debug].push_back(z_axis.get());
 		mAllRitems.push_back(std::move(x_axis));
 		mAllRitems.push_back(std::move(y_axis));
 		mAllRitems.push_back(std::move(z_axis));
+		mGraphicsCore->SubmitRenderPackets(mRenderPacketLayers[NamedPSO::Debug], NamedPSO::Debug);
 	}
 
-	mGraphicsCore->SubmitRenderPackets(packets, RenderLayer::Opaque);
-
-	// Add the sky sphere last
-	packets.clear();
-	auto skyRitem = std::make_unique<RenderPacket>();
-	XMStoreFloat4x4(&skyRitem->World, XMMatrixScaling(5000.0f, 5000.0f, 5000.0f));
-	skyRitem->Mat = mMaterials["sky"].get();
-	skyRitem->Geo = mGeometries["shapeGeo"].get();
-	skyRitem->PSO = NamedPSO::SkyMap;
-	skyRitem->PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
-	skyRitem->IndexCount = skyRitem->Geo->DrawArgs["sphere"].IndexCount;
-	skyRitem->StartIndexLocation = skyRitem->Geo->DrawArgs["sphere"].StartIndexLocation;
-	skyRitem->BaseVertexLocation = skyRitem->Geo->DrawArgs["sphere"].BaseVertexLocation;
-	skyRitem->Bounds = skyRitem->Geo->DrawArgs["sphere"].Bounds;
-	packets.push_back(skyRitem.get());
-	mAllRitems.push_back(std::move(skyRitem));
-
-	mGraphicsCore->SubmitRenderPackets(packets, RenderLayer::Sky);
+	mGraphicsCore->SubmitRenderPackets(mRenderPacketLayers[NamedPSO::DefaultWithShadows], NamedPSO::DefaultWithShadows);
+	mGraphicsCore->SubmitRenderPackets(mRenderPacketLayers[NamedPSO::NormalMapWithShadows], NamedPSO::NormalMapWithShadows);
+	mGraphicsCore->SubmitRenderPackets(mRenderPacketLayers[NamedPSO::SkyMap], NamedPSO::SkyMap);
 
 	mActiveObject = mAllRitems.begin()->get();
 }
@@ -564,6 +499,51 @@ void SceneManager::BuildMaterials()
 	mMaterials["default"] = std::move(defaultMat);
 }
 
+std::unique_ptr<RenderPacket> SceneManager::BuildGrid(CXMMATRIX worldTransform, CXMMATRIX texTransform) const
+{
+	return BuildRenderPacket("grid", "tile0", worldTransform, texTransform);
+}
+
+std::unique_ptr<RenderPacket> SceneManager::BuildBox(CXMMATRIX worldTransform, CXMMATRIX texTransform) const
+{
+	return BuildRenderPacket("box", "stone0", worldTransform, texTransform);
+}
+
+std::unique_ptr<RenderPacket> SceneManager::BuildColumn(CXMMATRIX worldTransform, CXMMATRIX texTransform) const
+{
+	return BuildRenderPacket("cylinder", "bricks0", worldTransform, texTransform);
+}
+
+std::unique_ptr<RenderPacket> SceneManager::BuildSphere(CXMMATRIX worldTransform, CXMMATRIX texTransform) const
+{
+	return BuildRenderPacket("sphere", "stone0", worldTransform, texTransform);
+}
+
+std::unique_ptr<RenderPacket> SceneManager::BuildSky(CXMMATRIX worldTransform, CXMMATRIX texTransform) const
+{
+	return BuildRenderPacket("sphere", "sky", worldTransform, texTransform);
+}
+
+std::unique_ptr<RenderPacket> SceneManager::BuildRenderPacket(std::string geometry, std::string material, CXMMATRIX worldTransform, CXMMATRIX texTransform) const
+{
+	auto renderPacket = std::make_unique<RenderPacket>();
+	XMStoreFloat4x4(&renderPacket->World, worldTransform);
+	XMStoreFloat4x4(&renderPacket->TexTransform, texTransform);
+	renderPacket->Mat = mMaterials.at(material).get();
+	// TODO: May be worthwhile to just set the Geometry and have the engine compute the draw args at ingestion.
+	// Might result in undesireable engine responsibilities in the long term.
+	renderPacket->Geo = mGeometries.at("shapeGeo").get();
+	renderPacket->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	renderPacket->IndexCount = renderPacket->Geo->DrawArgs.at(geometry).IndexCount;
+	renderPacket->StartIndexLocation = renderPacket->Geo->DrawArgs.at(geometry).StartIndexLocation;
+	renderPacket->BaseVertexLocation = renderPacket->Geo->DrawArgs.at(geometry).BaseVertexLocation;
+	renderPacket->Bounds = renderPacket->Geo->DrawArgs.at(geometry).Bounds;
+
+	return renderPacket;
+}
+
+
+
 void SceneManager::AddObject(const std::string& object, const std::string& material, NamedPSO PSO)
 {
 	// TODO: Add support for multiple geometry buffers
@@ -574,24 +554,15 @@ void SceneManager::AddObject(const std::string& object, const std::string& mater
 	XMFLOAT3 objPos;
 	XMStoreFloat3(&objPos, XMVectorMultiplyAdd(factor, look, cameraPos));
 
-	auto axis_set = std::make_unique<RenderPacket>();
-	XMStoreFloat4x4(&axis_set->World, XMMatrixTranslation(objPos.x, objPos.y, objPos.z));
-	XMStoreFloat4x4(&axis_set->TexTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
-	axis_set->Mat = mMaterials[material].get();
-	axis_set->Geo = mGeometries["shapeGeo"].get();
-	axis_set->PSO = PSO;
-	axis_set->IndexCount = axis_set->Geo->DrawArgs[object].IndexCount;
-	axis_set->StartIndexLocation = axis_set->Geo->DrawArgs[object].StartIndexLocation;
-	axis_set->BaseVertexLocation = axis_set->Geo->DrawArgs[object].BaseVertexLocation;
-	axis_set->Bounds = axis_set->Geo->DrawArgs[object].Bounds;
+	auto newPacket = BuildRenderPacket(object, material, XMMatrixTranslation(objPos.x, objPos.y, objPos.z));
 
 	std::vector<RenderPacket*> packets;
-	packets.push_back(axis_set.get());
+	packets.push_back(newPacket.get());
 
-	mActiveObject = axis_set.get();
-	mAllRitems.push_back(std::move(axis_set));
+	mActiveObject = newPacket.get();
+	mAllRitems.push_back(std::move(newPacket));
 
-	mGraphicsCore->SubmitRenderPackets(packets, RenderLayer::Opaque);
+	mGraphicsCore->SubmitRenderPackets(packets, PSO);
 }
 
 void SceneManager::AddObject(const RenderPacket* const packet)
@@ -605,7 +576,14 @@ void SceneManager::AddObject(const RenderPacket* const packet)
 	mActiveObject = newPacket.get();
 	mAllRitems.push_back(std::move(newPacket));
 
-	mGraphicsCore->SubmitRenderPackets(packets, RenderLayer::Opaque);
+	// PSOs are arbitrary, so match whatever layer the original object was in
+	for (int i = 0; i < NamedPSO::COUNT; ++i)
+	{
+		if (std::find(mRenderPacketLayers[i].begin(), mRenderPacketLayers[i].end(), packet) != mRenderPacketLayers[i].end())
+		{
+			mGraphicsCore->SubmitRenderPackets(packets, static_cast<NamedPSO>(i));
+		}
+	}
 }
 
 void SceneManager::Resize(int clientWidth, int clientHeight)

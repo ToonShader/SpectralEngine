@@ -13,8 +13,6 @@
 #pragma comment(lib, "D3D12.lib")
 #pragma comment(lib, "dxgi.lib")
 
-//using namespace SpectralEditor;
-
 #ifndef RELEASE
 #define new new ( _NORMAL_BLOCK , __FILE__ , __LINE__ )
 #endif
@@ -182,11 +180,11 @@ void GraphicsCore::ResizeWindow()
 	mScissorRect = { 0, 0, mClientWidth, mClientHeight };
 }
 
-void GraphicsCore::SubmitRenderPackets(const std::vector<RenderPacket*>& packets, const RenderLayer renderLayer)
+void GraphicsCore::SubmitRenderPackets(const std::vector<RenderPacket*>& packets, const NamedPSO targetPSO)
 {
-	mRenderPacketLayers[renderLayer].insert(mRenderPacketLayers[renderLayer].end(), packets.begin(), packets.end());
-	mRenderPacketLayers[RenderLayer::ALL].insert(mRenderPacketLayers[RenderLayer::ALL].end(), packets.begin(), packets.end());
-	assert(mRenderPacketLayers[RenderLayer::ALL].size() <= MAX_BUFFER_COUNT);
+	mRenderPacketLayers[targetPSO].insert(mRenderPacketLayers[targetPSO].end(), packets.begin(), packets.end());
+	mAllRenderPackets.insert(mAllRenderPackets.end(), packets.begin(), packets.end());
+	assert(mAllRenderPackets.size() <= MAX_BUFFER_COUNT);
 }
 
 void GraphicsCore::SubmitSceneLights(const std::vector<Light>& lights, int beg, int end)
@@ -249,10 +247,6 @@ void GraphicsCore::UpdateScene(const Camera& camera)
 
 	UpdateMainPassCB(camera);
 	UpdateShadowPassCB(mShadowMaps[0]);
-
-	// TODO: Validate no race condition with executing GPU commands
-	UpdateObjectCBs(mRenderPacketLayers[RenderLayer::ALL]);
-	UpdateMaterialCBs(mRenderPacketLayers[RenderLayer::ALL]);
 }
 
 void GraphicsCore::RenderScene()
@@ -260,6 +254,8 @@ void GraphicsCore::RenderScene()
 	//nvtxRangePushW(L"Scene Render");
 
 	FlushCommandQueue();
+	UpdateObjectCBs(mAllRenderPackets);
+	UpdateMaterialCBs(mAllRenderPackets);
 
 	auto cmdListAllocator = mCurrFrameResource->CmdListAlloc;
 
@@ -269,14 +265,7 @@ void GraphicsCore::RenderScene()
 
 	// A command list can be reset after it has been added to the command queue via ExecuteCommandList.
 	// Reusing the command list reuses memory.
-	if (mIsWireframe) // TODO: This doesn't make sense anymore. WF PSOs should perhaps be auto-generated
-	{
-		ASSERT_HR(mCommandList->Reset(cmdListAllocator.Get(), mPSOs[NamedPSO::Default_WF].Get()));
-	}
-	else
-	{
-		ASSERT_HR(mCommandList->Reset(cmdListAllocator.Get(), mPSOs[NamedPSO::Default].Get()));
-	}
+	ASSERT_HR(mCommandList->Reset(cmdListAllocator.Get(), nullptr));
 
 
 	// Indicate a state transition on the resource usage.
@@ -317,9 +306,21 @@ void GraphicsCore::RenderScene()
 	//CullObjectsByFrustum(visibleRenderPackets, mOpaqueRenderPackets, cameraFrustum, camera.GetView());
 
 	// TODO: Depending upon shader refactor, it may be that one layer should correspond to one PSO
-	DrawRenderItems(mCommandList.Get(), cmdListAllocator.Get(), RenderLayer::Opaque, false);
-	DrawRenderItems(mCommandList.Get(), cmdListAllocator.Get(), RenderLayer::Sky, false);
-	DrawRenderItems(mCommandList.Get(), cmdListAllocator.Get(), RenderLayer::Debug, false);
+	for (int activePSO = 0; activePSO < NamedPSO::COUNT; ++activePSO)
+	{
+		if (mRenderPacketLayers[activePSO].empty())
+			continue;
+
+		if (mIsWireframe)
+			mCommandList->SetPipelineState(mPSOs[activePSO][PSOVariant::Wireframe].Get());
+		else
+			mCommandList->SetPipelineState(mPSOs[activePSO][PSOVariant::Default].Get());
+
+		if (activePSO == NamedPSO::SkyMap)
+			DrawRenderItems(mCommandList.Get(), cmdListAllocator.Get(), mRenderPacketLayers[activePSO], RenderTechnique::Sky);
+		else
+			DrawRenderItems(mCommandList.Get(), cmdListAllocator.Get(), mRenderPacketLayers[activePSO], RenderTechnique::Standard);
+	}
 
 	// Indicate a state transition on the resource usage.
 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),
@@ -375,10 +376,11 @@ void GraphicsCore::RenderShadowMaps(ID3D12CommandAllocator* const cmdListAllocat
 	//D3D12_GPU_VIRTUAL_ADDRESS passCBAddress = passCB->GetGPUVirtualAddress() + 1 * passCBByteSize; 
 	//mCommandList->SetGraphicsRootConstantBufferView(1, passCBAddress);
 
-	mCommandList->SetPipelineState(mPSOs[NamedPSO::ShadowMap].Get());
+	mCommandList->SetPipelineState(mInternalPSOs[_InternalPSO::ShadowMap][PSOVariant::Default].Get());
 
 	// TODO: Depending upon shader refactor, it may be that one layer should correspond to one PSO
-	DrawRenderItems(mCommandList.Get(), cmdListAllocator, RenderLayer::Opaque, true);
+	DrawRenderItems(mCommandList.Get(), cmdListAllocator, mRenderPacketLayers[NamedPSO::DefaultWithShadows], RenderTechnique::Standard);
+	DrawRenderItems(mCommandList.Get(), cmdListAllocator, mRenderPacketLayers[NamedPSO::NormalMapWithShadows], RenderTechnique::Standard);
 
 	// Change back to GENERIC_READ so we can read the texture in a shader.
 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mShadowMaps[0].Resource(),
@@ -970,124 +972,102 @@ void GraphicsCore::BuildConstantBufferViews()
 		CD3DX12_CPU_DESCRIPTOR_HANDLE(dsvCpuStart, 1, mDsvDescriptorSize));
 }
 
+// TODO: Take in parameterized list to build shaders
 // TODO: Refactor this into something reusable
 void GraphicsCore::BuildPSOs()
 {
 	mPSOs.resize(NamedPSO::COUNT);
+	mInternalPSOs.resize(_InternalPSO::COUNT);
 
-	// PSO for standard opaque objects.
-	D3D12_GRAPHICS_PIPELINE_STATE_DESC opaquePsoDesc;
-	ZeroMemory(&opaquePsoDesc, sizeof(D3D12_GRAPHICS_PIPELINE_STATE_DESC));
-	opaquePsoDesc.InputLayout = { mInputLayout.data(), (UINT)mInputLayout.size() };
-	opaquePsoDesc.pRootSignature = mRootSignature.Get();
-	opaquePsoDesc.VS =
-	{
-		reinterpret_cast<BYTE*>(mShaders["standardVS"]->GetBufferPointer()),
-		mShaders["standardVS"]->GetBufferSize()
-	};
-	opaquePsoDesc.PS =
-	{
-		reinterpret_cast<BYTE*>(mShaders["opaquePS"]->GetBufferPointer()),
-		mShaders["opaquePS"]->GetBufferSize()
-	};
-	opaquePsoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
-	opaquePsoDesc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
-	opaquePsoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
-	opaquePsoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
-	opaquePsoDesc.SampleMask = UINT_MAX;
-	opaquePsoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-	opaquePsoDesc.NumRenderTargets = 1;
-	opaquePsoDesc.RTVFormats[0] = mBackBufferFormat;
-	opaquePsoDesc.SampleDesc.Count = 1;// m4xMsaaState ? 4 : 1;
-	opaquePsoDesc.SampleDesc.Quality = 0;// m4xMsaaState ? (m4xMsaaQuality - 1) : 0;
-	opaquePsoDesc.DSVFormat = mDepthStencilFormat;
-	ASSERT_HR(md3dDevice->CreateGraphicsPipelineState(&opaquePsoDesc, IID_PPV_ARGS(&mPSOs[NamedPSO::Default])));
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC commonPSODesc;
+	ZeroMemory(&commonPSODesc, sizeof(D3D12_GRAPHICS_PIPELINE_STATE_DESC));
+	commonPSODesc.InputLayout = { mInputLayout.data(), (UINT)mInputLayout.size() };
+	commonPSODesc.pRootSignature = mRootSignature.Get();
+	commonPSODesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+	commonPSODesc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
+	commonPSODesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+	commonPSODesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
+	commonPSODesc.SampleMask = UINT_MAX;
+	commonPSODesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+	commonPSODesc.NumRenderTargets = 1;
+	commonPSODesc.RTVFormats[0] = mBackBufferFormat;
+	commonPSODesc.SampleDesc.Count = 1;// m4xMsaaState ? 4 : 1;
+	commonPSODesc.SampleDesc.Quality = 0;// m4xMsaaState ? (m4xMsaaQuality - 1) : 0;
+	commonPSODesc.DSVFormat = mDepthStencilFormat;
 
-	// PSO for standard opaque wireframe objects.
-	D3D12_GRAPHICS_PIPELINE_STATE_DESC opaqueWireframePsoDesc = opaquePsoDesc;
-	opaqueWireframePsoDesc.RasterizerState.FillMode = D3D12_FILL_MODE_WIREFRAME;
-	ASSERT_HR(md3dDevice->CreateGraphicsPipelineState(&opaqueWireframePsoDesc, IID_PPV_ARGS(&mPSOs[NamedPSO::Default_WF])));
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC commonWireframePSODesc = commonPSODesc;
+	commonWireframePSODesc.RasterizerState.FillMode = D3D12_FILL_MODE_WIREFRAME;
+
+	// --- PSOs for simple opaque objects ---
+	BuildPSOFromDescription("SimpleVS", "SimplePS", commonPSODesc, mPSOs[NamedPSO::Default][PSOVariant::Default]);
+	BuildPSOFromDescription("SimpleVS_WithShadows", "SimplePS_WithShadows", commonPSODesc, mPSOs[NamedPSO::DefaultWithShadows][PSOVariant::Default]);
+
+	// PSOs for Wireframe variants
+	BuildPSOFromDescription("SimpleVS", "SimplePS", commonWireframePSODesc, mPSOs[NamedPSO::Default][PSOVariant::Wireframe]);
+	BuildPSOFromDescription("SimpleVS_WithShadows", "SimplePS_WithShadows", commonWireframePSODesc, mPSOs[NamedPSO::DefaultWithShadows][PSOVariant::Wireframe]);
 
 
-	// PSO for normal-mapped opaque objects
-	D3D12_GRAPHICS_PIPELINE_STATE_DESC opaqueNormMapPsoDesc = opaquePsoDesc;
-	opaqueNormMapPsoDesc.VS =
-	{
-		reinterpret_cast<BYTE*>(mShaders["standardNormMapVS"]->GetBufferPointer()),
-		mShaders["standardNormMapVS"]->GetBufferSize()
-	};
-	opaqueNormMapPsoDesc.PS =
-	{
-		reinterpret_cast<BYTE*>(mShaders["opaqueNormMapPS"]->GetBufferPointer()),
-		mShaders["opaqueNormMapPS"]->GetBufferSize()
-	};
-	ASSERT_HR(md3dDevice->CreateGraphicsPipelineState(&opaqueNormMapPsoDesc, IID_PPV_ARGS(&mPSOs[NamedPSO::NormalMap])));
-
-	// PSO for normal-mapped opaque wireframe objects.
-	D3D12_GRAPHICS_PIPELINE_STATE_DESC opaqueNormMapWireframePsoDesc = opaqueNormMapPsoDesc;
-	opaqueNormMapWireframePsoDesc.RasterizerState.FillMode = D3D12_FILL_MODE_WIREFRAME;
-	ASSERT_HR(md3dDevice->CreateGraphicsPipelineState(&opaqueNormMapWireframePsoDesc, IID_PPV_ARGS(&mPSOs[NamedPSO::NormalMap_WF])));
-
-
-	// PSO for sky mapping
-	D3D12_GRAPHICS_PIPELINE_STATE_DESC skyPsoDesc = opaquePsoDesc;
-	// We are expected to be inside the geometry
-	skyPsoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
-	// Shader forces depth to 1, so don't fail the depth test
-	skyPsoDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
-	skyPsoDesc.VS =
-	{
-		reinterpret_cast<BYTE*>(mShaders["standardSkyMapVS"]->GetBufferPointer()),
-		mShaders["standardSkyMapVS"]->GetBufferSize()
-	};
-	skyPsoDesc.PS =
-	{
-		reinterpret_cast<BYTE*>(mShaders["opaqueSkyMapPS"]->GetBufferPointer()),
-		mShaders["opaqueSkyMapPS"]->GetBufferSize()
-	};
-	ASSERT_HR(md3dDevice->CreateGraphicsPipelineState(&skyPsoDesc, IID_PPV_ARGS(&mPSOs[NamedPSO::SkyMap])));
-
-	// PSO for normal-mapped opaque wireframe objects.
-	D3D12_GRAPHICS_PIPELINE_STATE_DESC skyWireframePsoDesc = skyPsoDesc;
-	skyWireframePsoDesc.RasterizerState.FillMode = D3D12_FILL_MODE_WIREFRAME;
-	ASSERT_HR(md3dDevice->CreateGraphicsPipelineState(&skyWireframePsoDesc, IID_PPV_ARGS(&mPSOs[NamedPSO::SkyMap_WF])));
-
-
-	// PSO for rendering objects that can be shadowed W/O alpha clipping
-	D3D12_GRAPHICS_PIPELINE_STATE_DESC smapPsoDesc = opaquePsoDesc;
+	// --- PSOs for normal mapped objects ---
 	//smapPsoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_BACK;
 	//smapPsoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
-	smapPsoDesc.pRootSignature = mRootSignature.Get();
-	smapPsoDesc.VS =
-	{
-		reinterpret_cast<BYTE*>(mShaders["standardNormShadMapVS"]->GetBufferPointer()),
-		mShaders["standardNormShadMapVS"]->GetBufferSize()
-	};
-	smapPsoDesc.PS =
-	{
-		reinterpret_cast<BYTE*>(mShaders["opaqueNormShadMapPS"]->GetBufferPointer()),
-		mShaders["opaqueNormShadMapPS"]->GetBufferSize()
-	};
-	ASSERT_HR(md3dDevice->CreateGraphicsPipelineState(&smapPsoDesc, IID_PPV_ARGS(&mPSOs[NamedPSO::NormalWithShadowMap])));
+	BuildPSOFromDescription("NormalMappingVS", "NormalMappingPS", commonPSODesc, mPSOs[NamedPSO::NormalMap][PSOVariant::Default]);
+	BuildPSOFromDescription("NormalMappingVS_WithShadows", "NormalMappingPS_WithShadows", commonPSODesc, mPSOs[NamedPSO::NormalMapWithShadows][PSOVariant::Default]);
 
-	smapPsoDesc.RasterizerState.DepthBias = 100000;
-	smapPsoDesc.RasterizerState.DepthBiasClamp = 0.0f;
-	smapPsoDesc.RasterizerState.SlopeScaledDepthBias = 1.0f;
-	// PSO for rendering shadow maps w/o alpha clipping
-	smapPsoDesc.VS =
+	// PSOs for Wireframe variants
+	BuildPSOFromDescription("NormalMappingVS", "NormalMappingPS", commonWireframePSODesc, mPSOs[NamedPSO::NormalMap][PSOVariant::Wireframe]);
+	BuildPSOFromDescription("NormalMappingVS_WithShadows", "NormalMappingPS_WithShadows", commonWireframePSODesc, mPSOs[NamedPSO::NormalMapWithShadows][PSOVariant::Wireframe]);
+
+
+	// --- PSOs for sky mapping ---
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC skyPSODesc = commonPSODesc;
+	// We are expected to be inside the geometry
+	skyPSODesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+	// Shader forces depth to 1, so don't fail the depth test
+	skyPSODesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
+
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC skyWireframePSODesc = skyPSODesc;
+	skyWireframePSODesc.RasterizerState.FillMode = D3D12_FILL_MODE_WIREFRAME;
+
+	BuildPSOFromDescription("SkyMappingVS", "SkyMappingPS", skyPSODesc, mPSOs[NamedPSO::SkyMap][PSOVariant::Default]);
+
+	// PSO for Wireframe variants
+	BuildPSOFromDescription("SkyMappingVS", "SkyMappingPS", skyWireframePSODesc, mPSOs[NamedPSO::SkyMap][PSOVariant::Wireframe]);
+
+
+	// --- INTERNAL PSOs for rendering shadow maps W/O alpha clipping ---
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC shadowMapPSODesc = commonPSODesc;
+	shadowMapPSODesc.RasterizerState.DepthBias = 100000;
+	shadowMapPSODesc.RasterizerState.DepthBiasClamp = 0.0f;
+	shadowMapPSODesc.RasterizerState.SlopeScaledDepthBias = 1.0f;
+	shadowMapPSODesc.VS =
 	{
-		reinterpret_cast<BYTE*>(mShaders["standardShadowMapVS"]->GetBufferPointer()),
-		mShaders["standardShadowMapVS"]->GetBufferSize()
+		reinterpret_cast<BYTE*>(mShaders["ShadowMappingVS"]->GetBufferPointer()),
+		mShaders["ShadowMappingVS"]->GetBufferSize()
 	};
 	// Shadow map pass does not have a render target.
-	smapPsoDesc.PS =
+	shadowMapPSODesc.PS =
 	{
 		nullptr,
 		0
 	};
-	smapPsoDesc.RTVFormats[0] = DXGI_FORMAT_UNKNOWN;
-	smapPsoDesc.NumRenderTargets = 0;
-	ASSERT_HR(md3dDevice->CreateGraphicsPipelineState(&smapPsoDesc, IID_PPV_ARGS(&mPSOs[NamedPSO::ShadowMap])));
+	shadowMapPSODesc.RTVFormats[0] = DXGI_FORMAT_UNKNOWN;
+	shadowMapPSODesc.NumRenderTargets = 0;
+	ASSERT_HR(md3dDevice->CreateGraphicsPipelineState(&shadowMapPSODesc, IID_PPV_ARGS(&mInternalPSOs[_InternalPSO::ShadowMap][PSOVariant::Default])));
+}
+
+void GraphicsCore::BuildPSOFromDescription(const std::string& vertexShader, const std::string& pixelShader, D3D12_GRAPHICS_PIPELINE_STATE_DESC& psoDesc, Microsoft::WRL::ComPtr<ID3D12PipelineState>& comPtr)
+{
+	psoDesc.VS =
+	{
+		reinterpret_cast<BYTE*>(mShaders[vertexShader]->GetBufferPointer()),
+		mShaders[vertexShader]->GetBufferSize()
+	};
+	psoDesc.PS =
+	{
+		reinterpret_cast<BYTE*>(mShaders[pixelShader]->GetBufferPointer()),
+		mShaders[pixelShader]->GetBufferSize()
+	};
+	ASSERT_HR(md3dDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&comPtr)));
 }
 
 void GraphicsCore::BuildFrameResources()
@@ -1101,29 +1081,15 @@ void GraphicsCore::BuildFrameResources()
 	//}
 }
 
-void GraphicsCore::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, ID3D12CommandAllocator* listAlloc, const RenderLayer renderLayer, const bool isShadowMap)
+void GraphicsCore::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, ID3D12CommandAllocator* listAlloc, const std::vector<RenderPacket*> renderPackets, RenderTechnique renderTechnique)
 {
 	//nvtxRangePushW(L"Draw Items");
 
-	NamedPSO activePSO = NamedPSO::NONE;
-	for (size_t i = 0; i < mRenderPacketLayers[renderLayer].size(); ++i)
+	for (size_t i = 0; i < renderPackets.size(); ++i)
 	{
 		// Set PSO required to draw the object
 		// TODO: Consolodate
-		auto renderPacket = mRenderPacketLayers[renderLayer][i];
-		NamedPSO targetPSO = renderPacket->PSO;
-		if (mIsWireframe)
-			targetPSO = static_cast<NamedPSO>(static_cast<int>(targetPSO) + 1);
-		if (targetPSO != activePSO)
-		{
-			activePSO = targetPSO;
-			cmdList->SetPipelineState(mPSOs[activePSO].Get());
-		}
-		if (isShadowMap) // TODO: REMOVE
-		{
-			activePSO = NamedPSO::ShadowMap;
-			cmdList->SetPipelineState(mPSOs[activePSO].Get());
-		}
+		auto renderPacket = renderPackets[i];
 
 		// TODO: This should be refactored to consider that the buffers for the same mesh will be the same.
 		//			- Consider sorting objects by shader used, then by mesh.
@@ -1167,7 +1133,7 @@ void GraphicsCore::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, ID3D12Com
 		CD3DX12_GPU_DESCRIPTOR_HANDLE tex(mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 		tex.Offset(renderPacket->Mat->DiffuseSrvHeapIndex, mCbvSrvUavDescriptorSize);
 
-		if (activePSO < NamedPSO::SkyMap)
+		if (renderTechnique != RenderTechnique::Sky)
 			cmdList->SetGraphicsRootDescriptorTable(3, tex);
 		// TODO: Verify this is legal to exclude, then remove.
 		//else 
@@ -1175,7 +1141,7 @@ void GraphicsCore::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, ID3D12Com
 		// TODO: While technically legal, I really don't like this as it may techncially leave something in the next register.
 		// Should probably just be if/else. Setting this descriptor every time doesn't make sense anyways.
 		cmdList->SetGraphicsRootDescriptorTable(4, tex);
-		if (activePSO != NamedPSO::SkyMap)
+		if (renderTechnique != RenderTechnique::Sky)
 		{
 			tex = (mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 			tex.Offset(6, mCbvSrvUavDescriptorSize);
@@ -1252,19 +1218,21 @@ void GraphicsCore::BuildShadersAndInputLayout()
 		NULL, NULL
 	};
 
-	mShaders["standardVS"] = CompileShader(L"Shaders\\Default.hlsl", shadowMappingDefines, "VS", "vs_5_1");
-	mShaders["opaquePS"] = CompileShader(L"Shaders\\Default.hlsl", shadowMappingDefines, "PS", "ps_5_1");
-	mShaders["standardNormMapVS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "VS_NormalMapped", "vs_5_1");
-	mShaders["opaqueNormMapPS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "PS_NormalMapped", "ps_5_1");
+	mShaders["SimpleVS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "VS", "vs_5_1");
+	mShaders["SimplePS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "PS", "ps_5_1");
+	mShaders["SimpleVS_WithShadows"] = CompileShader(L"Shaders\\Default.hlsl", shadowMappingDefines, "VS", "vs_5_1");
+	mShaders["SimplePS_WithShadows"] = CompileShader(L"Shaders\\Default.hlsl", shadowMappingDefines, "PS", "ps_5_1");
 
-	mShaders["standardNormShadMapVS"] = CompileShader(L"Shaders\\Default.hlsl", shadowMappingDefines, "VS_NormalMapped", "vs_5_1");
-	mShaders["opaqueNormShadMapPS"] = CompileShader(L"Shaders\\Default.hlsl", shadowMappingDefines, "PS_NormalMapped", "ps_5_1");
+	mShaders["NormalMappingVS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "VS_NormalMapped", "vs_5_1");
+	mShaders["NormalMappingPS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "PS_NormalMapped", "ps_5_1");
+	mShaders["NormalMappingVS_WithShadows"] = CompileShader(L"Shaders\\Default.hlsl", shadowMappingDefines, "VS_NormalMapped", "vs_5_1");
+	mShaders["NormalMappingPS_WithShadows"] = CompileShader(L"Shaders\\Default.hlsl", shadowMappingDefines, "PS_NormalMapped", "ps_5_1");
 
-	mShaders["standardShadowMapVS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "VS_ShadowMap", "vs_5_1");
-	mShaders["opaqueShadowMapPS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "PS_ShadowMap", "ps_5_1"); // TODO: Fix names
+	mShaders["ShadowMappingVS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "VS_ShadowMap", "vs_5_1");
+	mShaders["ShadowMappingPS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "PS_ShadowMap", "ps_5_1");
 
-	mShaders["standardSkyMapVS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "VS_SkyMap", "vs_5_1");
-	mShaders["opaqueSkyMapPS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "PS_SkyMap", "ps_5_1");
+	mShaders["SkyMappingVS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "VS_SkyMap", "vs_5_1");
+	mShaders["SkyMappingPS"] = CompileShader(L"Shaders\\Default.hlsl", nullptr, "PS_SkyMap", "ps_5_1");
 
 	mInputLayout =
 	{

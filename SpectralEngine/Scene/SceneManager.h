@@ -30,6 +30,12 @@ private:
 	void BuildShapeGeometry();
 	void BuildRenderItems();
 	void BuildMaterials();
+	std::unique_ptr<RenderPacket> BuildGrid(CXMMATRIX worldTransform = XMMatrixIdentity(), CXMMATRIX texTransform = XMMatrixIdentity()) const;
+	std::unique_ptr<RenderPacket> BuildBox(CXMMATRIX worldTransform = XMMatrixIdentity(), CXMMATRIX texTransform = XMMatrixIdentity()) const;
+	std::unique_ptr<RenderPacket> BuildColumn(CXMMATRIX worldTransform = XMMatrixIdentity(), CXMMATRIX texTransform = XMMatrixIdentity()) const;
+	std::unique_ptr<RenderPacket> BuildSphere(CXMMATRIX worldTransform = XMMatrixIdentity(), CXMMATRIX texTransform = XMMatrixIdentity()) const;
+	std::unique_ptr<RenderPacket> BuildSky(CXMMATRIX worldTransform = XMMatrixIdentity(), CXMMATRIX texTransform = XMMatrixIdentity()) const;
+	std::unique_ptr<RenderPacket> BuildRenderPacket(std::string geometry, std::string material, CXMMATRIX worldTransform = XMMatrixIdentity(), CXMMATRIX texTransform = XMMatrixIdentity()) const;
 
 private:
 	Spectral::Graphics::GraphicsCore* mGraphicsCore = nullptr;
@@ -37,6 +43,7 @@ private:
 	std::unordered_map<std::string, std::unique_ptr<Mesh>> mGeometries;
 	std::unordered_map<std::string, std::unique_ptr<Texture>> mTextures;
 	std::unordered_map<std::string, std::unique_ptr<Material>> mMaterials;
+	std::array<std::vector<RenderPacket*>, NamedPSO::COUNT> mRenderPacketLayers;
 	std::vector<std::unique_ptr<RenderPacket>> mAllRitems;
 	std::vector<Light> mLights;
 

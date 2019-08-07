@@ -50,7 +50,7 @@ namespace Spectral
 			static bool DestroyGraphicsCoreInstance();
 			// Potential Feature: Support runtime switching of render window
 
-			void SubmitRenderPackets(const std::vector<RenderPacket*>& packets, RenderLayer renderLayer);
+			void SubmitRenderPackets(const std::vector<RenderPacket*>& packets, NamedPSO targetPSO);
 			void SubmitSceneLights(const std::vector<Light>& lights, int beg, int end);
 			// /*virtual*/ LRESULT MsgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 			void RenderPrePass(/*const Timer& gt*/);
@@ -92,8 +92,9 @@ namespace Spectral
 			void BuildDescriptorHeaps();
 			void BuildConstantBufferViews();
 			void BuildPSOs();
+			void BuildPSOFromDescription(const std::string& vertexShader, const std::string& pixelShader, D3D12_GRAPHICS_PIPELINE_STATE_DESC& psoDesc, Microsoft::WRL::ComPtr<ID3D12PipelineState>& comPtr);
 			void BuildFrameResources();
-			void DrawRenderItems(ID3D12GraphicsCommandList* cmdList, ID3D12CommandAllocator* listAlloc, RenderLayer renderLayer, bool isShadowMap);
+			void DrawRenderItems(ID3D12GraphicsCommandList* cmdList, ID3D12CommandAllocator* listAlloc, const std::vector<RenderPacket*> renderPackets, RenderTechnique renderTechnique);
 			// It might be useful in the future to expose this
 			void RenderShadowMaps(ID3D12CommandAllocator* cmdListAllocator);
 
@@ -162,12 +163,14 @@ namespace Spectral
 			Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> mSrvDescriptorHeap = nullptr;
 
 			std::unordered_map<std::string, Microsoft::WRL::ComPtr<ID3DBlob>> mShaders;
-			std::vector<Microsoft::WRL::ComPtr<ID3D12PipelineState>> mPSOs;
+			// Each PSO has variants that are generated at compile time
+			std::vector<std::array<Microsoft::WRL::ComPtr<ID3D12PipelineState>, PSOVariant::COUNT>> mPSOs;
+			std::vector<std::array<Microsoft::WRL::ComPtr<ID3D12PipelineState>, PSOVariant::COUNT>> mInternalPSOs;
 
 			std::vector<D3D12_INPUT_ELEMENT_DESC> mInputLayout;
 
-			// TODO: Could make it a map of vectors, keyed by PSO. Might create issues with draw order down the line.
-			std::array<std::vector<RenderPacket*>, RenderLayer::COUNT> mRenderPacketLayers;
+			std::array<std::vector<RenderPacket*>, NamedPSO::COUNT> mRenderPacketLayers;
+			std::vector<RenderPacket*> mAllRenderPackets;
 
 			PassConstants mMainPassCB;
 			PassConstants mShadowPassCB;
