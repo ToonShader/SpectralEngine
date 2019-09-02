@@ -4,7 +4,6 @@
 // Contains API for shader lighting.
 //***************************************************************************************
 
-#define MaxLights 16
 
 struct Light
 {
@@ -138,30 +137,56 @@ float3 ComputeSpotLight(Light L, Material mat, float3 pos, float3 normal, float3
 
 float4 ComputeLighting(uniform StructuredBuffer<Light> lightSB, Material mat,
                        float3 pos, float3 normal, float3 toEye,
-                       float3 shadowFactor/*, float activePointLights*/)
+                       float shadowFactor[MAX_SHADOW_COUNT], int4 numActiveShadows/*, float4 activePointLights*/)
 {
     float3 result = 0.0f;
 
-    int i = 0;
+    int lightIndex = 0;
+	int shadowIndex = 0;
 
 #if (NUM_DIR_LIGHTS > 0)
-    for(i = 0; i < NUM_DIR_LIGHTS; ++i)
+    for (lightIndex = 0; lightIndex < NUM_DIR_LIGHTS; ++lightIndex)
     {
-        result += shadowFactor[i] * ComputeDirectionalLight(lightSB[i], mat, normal, toEye);
+		if (lightIndex < numActiveShadows[0])
+		{
+			result += shadowFactor[shadowIndex] * ComputeDirectionalLight(lightSB[lightIndex], mat, normal, toEye);
+			++shadowIndex;
+		}
+		else
+		{
+			result += ComputeDirectionalLight(lightSB[lightIndex], mat, normal, toEye);
+		}
     }
 #endif
 
 #if (NUM_POINT_LIGHTS > 0)
-    for(i = NUM_DIR_LIGHTS; i < NUM_DIR_LIGHTS + NUM_POINT_LIGHTS; ++i)
+    for (lightIndex = NUM_DIR_LIGHTS; lightIndex < NUM_DIR_LIGHTS + NUM_POINT_LIGHTS; ++lightIndex)
     {
-        result += ComputePointLight(lightSB[i], mat, pos, normal, toEye);
+		if (lightIndex < numActiveShadows[1])
+		{
+			result += shadowFactor[shadowIndex] * ComputePointLight(lightSB[lightIndex], mat, pos, normal, toEye);
+			++shadowIndex;
+		}
+		else
+		{
+			result += ComputePointLight(lightSB[lightIndex], mat, pos, normal, toEye);
+
+		}
     }
 #endif
 
 #if (NUM_SPOT_LIGHTS > 0)
-    for(i = NUM_DIR_LIGHTS + NUM_POINT_LIGHTS; i < NUM_DIR_LIGHTS + NUM_POINT_LIGHTS + NUM_SPOT_LIGHTS; ++i)
+    for (lightIndex = NUM_DIR_LIGHTS + NUM_POINT_LIGHTS; lightIndex < NUM_DIR_LIGHTS + NUM_POINT_LIGHTS + NUM_SPOT_LIGHTS; ++lightIndex)
     {
-        result += ComputeSpotLight(lightSB[i], mat, pos, normal, toEye);
+		if (lightIndex < numActiveShadows[2])
+		{
+			result += shadowFactor[shadowIndex] * ComputeSpotLight(lightSB[lightIndex], mat, pos, normal, toEye);
+			++shadowIndex;
+		}
+		else
+		{
+			result += ComputeSpotLight(lightSB[lightIndex], mat, pos, normal, toEye);
+		}
     }
 #endif 
 

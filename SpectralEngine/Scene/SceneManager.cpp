@@ -20,6 +20,7 @@
 //#define new new ( _NORMAL_BLOCK , __FILE__ , __LINE__ )
 //#endif
 
+using namespace Spectral::Graphics;
 
 
 SceneManager::SceneManager(bool benchmarking)
@@ -59,7 +60,11 @@ void SceneManager::Initialize(Spectral::Graphics::GraphicsCore* graphicsCore)
 	// AmbientLight = { 0.25f, 0.25f, 0.35f, 1.0f };
 	//mLights[0].Direction = { 0.57735f, -0.57735f, 0.57735f }; // TODO: Use this direction to resolve some edge cases in testing
 	XMStoreFloat3(&mLights[0].Direction, XMVector3Normalize({ 10.57735f, -15.57735f, 7.57735f })); //{ 0.57735f, -0.57735f, 0.57735f };
-	mLights[0].Strength = { 1.0f, 1.0f, 1.0f };
+	mLights[0].Strength = { 1.0f, 0.0f, 0.0f };
+	XMStoreFloat3(&mLights[1].Direction, XMVector3Normalize({ 3.57735f, -15.57735f, 7.57735f })); //{ 0.57735f, -0.57735f, 0.57735f };
+	mLights[1].Strength = { 0.0f, 0.0f, 1.0f };
+	XMStoreFloat3(&mLights[2].Direction, XMVector3Normalize({ -13.57735f, -9.57735f, -17.57735f })); //{ 0.57735f, -0.57735f, 0.57735f };
+	mLights[2].Strength = { 1.0f, 0.25f, 1.0f };
 	//mLights[1].Direction = { -0.57735f, -0.57735f, 0.57735f };
 	//mLights[1].Strength = { 0.3f, 0.3f, 0.3f };
 	//mLights[2].Direction = { 0.0f, -0.707f, -0.707f };
@@ -128,7 +133,22 @@ void SceneManager::Initialize(Spectral::Graphics::GraphicsCore* graphicsCore)
 	//	mLights[i].FalloffEnd = 30;
 	//}
 
-	mGraphicsCore->SubmitSceneLights(mLights, 0, mLights.size());
+	mGraphicsCore->SubmitSceneLights(mLights);
+
+	ShadowMap shadowMap;
+	shadowMap.SceneLight = &mLights[0];
+	shadowMap.BoundingSphere = BoundingSphere(XMFLOAT3(mLights[0].Position.x, 3, mLights[0].Position.z), 15);
+	std::vector<ShadowMap> shadowMaps;
+	shadowMaps.push_back(shadowMap);
+	ShadowMap shadowMap2;
+	shadowMap2.SceneLight = &mLights[1];
+	shadowMap2.BoundingSphere = BoundingSphere(XMFLOAT3(mLights[1].Position.x + 0, 3, mLights[1].Position.z), 15);
+	shadowMaps.push_back(shadowMap2);
+	ShadowMap shadowMap3;
+	shadowMap3.SceneLight = &mLights[2];
+	shadowMap3.BoundingSphere = BoundingSphere(XMFLOAT3(mLights[1].Position.x + 30, 13, mLights[1].Position.z+ 35), 15);
+	shadowMaps.push_back(shadowMap3);
+	mGraphicsCore->LoadShadowMaps(shadowMaps, XMINT3(3, 0, 0));
 }
 
 void SceneManager::UpdateScene(float dt)
@@ -149,7 +169,7 @@ void SceneManager::UpdateScene(float dt)
 	}
 
 	mLights[0].Position = XMFLOAT3(radius*sinf(phi)*cosf(theta), 3, radius*sinf(phi)*sinf(theta));
-	mGraphicsCore->SubmitSceneLights(mLights, 0, mLights.size());
+	mGraphicsCore->SubmitSceneLights(mLights);
 
 	mSceneCamera.UpdateViewMatrix();
 

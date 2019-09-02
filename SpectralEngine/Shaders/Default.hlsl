@@ -6,7 +6,7 @@
 
 // Defaults for number of lights.
 #ifndef NUM_DIR_LIGHTS
-    #define NUM_DIR_LIGHTS 1
+    #define NUM_DIR_LIGHTS 3
 #endif
 
 #ifndef NUM_POINT_LIGHTS
@@ -17,13 +17,15 @@
     #define NUM_SPOT_LIGHTS 0
 #endif
 
+#define MAX_SHADOW_COUNT 16
+
 // Include structures and functions for lighting.
 #include "LightingUtil.hlsl"
 
 Texture2D	gDiffuseMap : register(t0, space0);
 Texture2D	gNormalMap : register(t1, space0);
 TextureCube gCubeMap : register(t2, space0);
-Texture2D	gShadowMap : register(t3, space0); // TODO: SHIFT UP ONE
+Texture2D	gShadowMap[MAX_SHADOW_COUNT] : register(t3, space0); // TODO: SHIFT UP ONE
 
 // Indices [0, NUM_DIR_LIGHTS) are directional lights;
 // indices [NUM_DIR_LIGHTS, NUM_DIR_LIGHTS+NUM_POINT_LIGHTS) are point lights;
@@ -65,9 +67,10 @@ cbuffer cbPass : register(b0)
 	float4x4 gInvProj;
 	float4x4 gViewProj;
 	float4x4 gInvViewProj;
-	float4x4 gShadowTransform;
+	float4x4 gShadowTransform[MAX_SHADOW_COUNT];
+	int4 gNumActiveShadows;
 	float3 gEyePosW;
-	float gNumActiveLights;
+	float cbPassPad1;
 	float2 gRenderTargetSize;
 	float2 gInvRenderTargetSize;
 	float gNearZ;
@@ -87,8 +90,8 @@ struct VertexIn
 struct VertexOut
 {
 	float4 PosH			: SV_POSITION;
-    float4 ShadowPosH	: POSITION0;
-	float3 PosW			: POSITION1;
+	float3 PosW			: POSITION0;
+	float4 ShadowPosH[MAX_SHADOW_COUNT]	: POSITION1;
     float3 NormalW		: NORMAL;
 	float3 TangentW		: TANGENT;
 	float2 TexC			: TEXCOORD;
@@ -142,7 +145,11 @@ VertexOut VS(VertexIn vin)
 
 #ifdef SHADOW_MAPPED
 	// Generate projective tex-coords to project shadow map onto scene.
-	vout.ShadowPosH = mul(posW, gShadowTransform);
+	[unroll]
+	for (int i = 0; i < MAX_SHADOW_COUNT; ++i)
+	{
+		vout.ShadowPosH[i] = mul(posW, gShadowTransform[i]);
+	}
 #endif
 
     return vout;
@@ -161,15 +168,19 @@ float4 PS(VertexOut pin) : SV_Target
 	// Indirect lighting.
 	float4 ambient = gAmbientLight * diffuseAlbedo;// gDiffuseAlbedo;
 
-	float3 shadowFactor = float3(1.0f, 1.0f, 1.0f);
+	float shadowFactors[MAX_SHADOW_COUNT];
 #ifdef SHADOW_MAPPED
 	// Only the first light casts a shadow.
-	shadowFactor[0] = CalcShadowFactor(gShadowMap, gsamShadowBorder, pin.ShadowPosH); // TODO: Fix, obviously
+	[loop]
+	for (int i = 0; i < gNumActiveShadows.w; ++i)
+	{
+		shadowFactors[i] = CalcShadowFactor(gShadowMap[i], gsamShadowBorder, pin.ShadowPosH[i]);
+	}
 #endif
 	const float shininess = (1.0f - gRoughness);
     Material mat = { diffuseAlbedo /*gDiffuseAlbedo*/, gFresnelR0, shininess };
     float4 directLight = ComputeLighting(gLights, mat, pin.PosW, 
-		pin.NormalW, toEyeW, shadowFactor/*, gNumActiveLights*/);
+		pin.NormalW, toEyeW, shadowFactors, gNumActiveShadows/*, gNumActiveLights*/);
 
     float4 litColor = ambient + directLight;
 
@@ -202,7 +213,11 @@ VertexOut VS_NormalMapped(VertexIn vin)
 
 #ifdef SHADOW_MAPPED
 	// Generate projective tex-coords to project shadow map onto scene.
-	vout.ShadowPosH = mul(posW, gShadowTransform);
+	[unroll]
+	for (int i = 0; i < MAX_SHADOW_COUNT; ++i)
+	{
+		vout.ShadowPosH[i] = mul(posW, gShadowTransform[i]);
+	}
 #endif
 
 	return vout;
@@ -231,16 +246,20 @@ float4 PS_NormalMapped(VertexOut pin) : SV_Target
 	// Indirect lighting.
 	float4 ambient = gAmbientLight * diffuseAlbedo;// gDiffuseAlbedo;
 
-	float3 shadowFactor = float3(1.0f, 1.0f, 1.0f);
+	float shadowFactors[MAX_SHADOW_COUNT];
 #ifdef SHADOW_MAPPED
 	// Only the first light casts a shadow.
-	shadowFactor[0] = CalcShadowFactor(gShadowMap, gsamShadowBorder, pin.ShadowPosH); // TODO: Fix, obviously
+	[loop]
+	for (int i = 0; i < gNumActiveShadows.w; ++i)
+	{
+		shadowFactors[i] = CalcShadowFactor(gShadowMap[i], gsamShadowBorder, pin.ShadowPosH[i]);
+	}
 #endif
 	// Shininess is stored at a per-pixel level in the normal map alpha channel.
 	const float shininess = (1.0f - gRoughness) * normalMapSample.a;
 	Material mat = { diffuseAlbedo /*gDiffuseAlbedo*/, gFresnelR0, shininess };
 	float4 directLight = ComputeLighting(gLights, mat, pin.PosW,
-		bumpedNormalW, toEyeW, shadowFactor/*, gNumActiveLights*/);
+		bumpedNormalW, toEyeW, shadowFactors, gNumActiveShadows/*, gNumActiveLights*/);
 
 	float4 litColor = ambient + directLight;
 

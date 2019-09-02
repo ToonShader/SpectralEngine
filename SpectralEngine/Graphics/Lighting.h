@@ -3,6 +3,20 @@
 #include "Common/Math.h"
 
 
+struct _LightType
+{
+	_LightType() = delete;
+
+	enum Value : int
+	{
+		Directional,
+		Spot,
+		Point,
+		COUNT,
+		NONE
+	};
+};
+typedef typename _LightType::Value LightType;
 
 struct Light
 {

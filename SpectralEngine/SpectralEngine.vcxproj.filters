@@ -97,6 +97,9 @@
     <ClInclude Include="Graphics\GraphicsUtility.h">
       <Filter>Source Files\Graphics</Filter>
     </ClInclude>
+    <ClInclude Include="Graphics\ShadowMap.h">
+      <Filter>Source Files\Graphics</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Run.cpp">
@@ -145,6 +148,9 @@
       <Filter>TEMP\Common</Filter>
     </ClCompile>
     <ClCompile Include="Graphics\GraphicsUtility.cpp">
+      <Filter>Source Files\Graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="Graphics\ShadowMap.cpp">
       <Filter>Source Files\Graphics</Filter>
     </ClCompile>
   </ItemGroup>

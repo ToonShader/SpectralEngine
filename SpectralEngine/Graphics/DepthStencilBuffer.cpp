@@ -3,16 +3,13 @@
 
 
 
-DepthStencilBuffer::DepthStencilBuffer(ID3D12Device* device, DXGI_FORMAT format, UINT height, UINT width)
+DepthStencilBuffer::DepthStencilBuffer(ID3D12Device* device, DXGI_FORMAT format, UINT width, UINT height)
 {
 	md3dDevice = device;
 	mFormat = format;
 
 	mWidth = width;
 	mHeight = height;
-
-	mViewport = { 0.0f, 0.0f, (float)width, (float)height, 0.0f, 1.0f };
-	mScissorRect = { 0, 0, (int)width, (int)height };
 
 	BuildResource();
 }
@@ -40,16 +37,6 @@ CD3DX12_GPU_DESCRIPTOR_HANDLE DepthStencilBuffer::Srv()const
 CD3DX12_CPU_DESCRIPTOR_HANDLE DepthStencilBuffer::Dsv()const
 {
 	return mhCpuDsv;
-}
-
-D3D12_VIEWPORT DepthStencilBuffer::Viewport()const
-{
-	return mViewport;
-}
-
-D3D12_RECT DepthStencilBuffer::ScissorRect()const
-{
-	return mScissorRect;
 }
 
 void DepthStencilBuffer::BuildDescriptors(
@@ -130,49 +117,4 @@ void DepthStencilBuffer::BuildResource()
 		D3D12_RESOURCE_STATE_GENERIC_READ,
 		&optClear,
 		IID_PPV_ARGS(&mDepthStencilBuffer)));
-}
-
-
-
-
-
-// ----------------------------------------------
-void DepthStencilBuffer::UpdateShadowTransform(const DirectionalLight& dirLight, DirectX::BoundingSphere bounds) // TODO: Separate classes for different light types?
-{
-	// Only the first "main" light casts a shadow.
-	XMVECTOR lightDir = XMLoadFloat3(&dirLight.Direction);
-	XMVECTOR lightPos = (-2.0f * bounds.Radius * lightDir) + XMLoadFloat3(&bounds.Center);
-	XMVECTOR targetPos = XMLoadFloat3(&bounds.Center);
-	XMVECTOR lightUp = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
-	XMMATRIX lightView = XMMatrixLookAtLH(lightPos, targetPos, lightUp);
-
-	XMStoreFloat3(&mLightVirtualPosW, lightPos);
-
-	// Transform bounding sphere to light space.
-	XMFLOAT3 sphereCenterLS;
-	XMStoreFloat3(&sphereCenterLS, XMVector3TransformCoord(targetPos, lightView));
-
-	// Orthographic frustum in light space encloses scene.
-	float l = sphereCenterLS.x - bounds.Radius;
-	float b = sphereCenterLS.y - bounds.Radius;
-	float n = sphereCenterLS.z - bounds.Radius;
-	float r = sphereCenterLS.x + bounds.Radius;
-	float t = sphereCenterLS.y + bounds.Radius;
-	float f = sphereCenterLS.z + bounds.Radius;
-
-	mLightNearZ = n;
-	mLightFarZ = f;
-	XMMATRIX lightProj = XMMatrixOrthographicOffCenterLH(l, r, b, t, n, f);
-
-	// Transform NDC space [-1,+1]^2 to texture space [0,1]^2
-	XMMATRIX T(
-		0.5f, 0.0f, 0.0f, 0.0f,
-		0.0f, -0.5f, 0.0f, 0.0f,
-		0.0f, 0.0f, 1.0f, 0.0f,
-		0.5f, 0.5f, 0.0f, 1.0f);
-
-	XMMATRIX S = lightView * lightProj*T;
-	XMStoreFloat4x4(&mLightView, lightView);
-	XMStoreFloat4x4(&mLightProj, lightProj);
-	XMStoreFloat4x4(&mShadowTransform, S);
 }

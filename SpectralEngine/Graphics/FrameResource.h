@@ -98,6 +98,7 @@ struct MaterialConstants
 };
 
 const int MAX_LIGHTS = 16;
+const int MAX_SHADOW_COUNT = 16;
 struct PassConstants
 {
 	DirectX::XMFLOAT4X4 View = Spectral::Math::XMF4x4Identity();
@@ -106,11 +107,13 @@ struct PassConstants
 	DirectX::XMFLOAT4X4 InvProj = Spectral::Math::XMF4x4Identity();
 	DirectX::XMFLOAT4X4 ViewProj = Spectral::Math::XMF4x4Identity();
 	DirectX::XMFLOAT4X4 InvViewProj = Spectral::Math::XMF4x4Identity();
-	DirectX::XMFLOAT4X4 ShadowTransform = Spectral::Math::XMF4x4Identity();
+	DirectX::XMFLOAT4X4 ShadowTransform[MAX_SHADOW_COUNT] = {};
+	DirectX::XMINT4 NumActiveShadows = { 0.0f, 0.0f, 0.0f, 0.0f };
 	DirectX::XMFLOAT3 EyePosW = { 0.0f, 0.0f, 0.0f };
-	float NumActiveLights = 0.0f;
+	float cbPad1 = 0.0f;
 	DirectX::XMFLOAT2 RenderTargetSize = { 0.0f, 0.0f };
 	DirectX::XMFLOAT2 InvRenderTargetSize = { 0.0f, 0.0f };
+	// TODO: non-explicit types may not copy correctly in x64
 	float NearZ = 0.0f;
 	float FarZ = 0.0f;
 	float TotalTime = 0.0f;

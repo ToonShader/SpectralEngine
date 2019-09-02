@@ -5,6 +5,7 @@
 #include "Microsoft/d3dx12.h"
 #include "Microsoft/DDSTextureLoader.h"
 #include <Math.h>
+#include <memory.h>
 #include <DirectXColors.h>
 #include <d3dcompiler.h>
 #include <d3d12SDKLayers.h>
@@ -28,7 +29,10 @@ const int gNumFrameResources = 1;
 
 GraphicsCore::GraphicsCore()
 {
-
+	for (int i = 0; i < MAX_SHADOW_COUNT; ++i)
+	{
+		mMainPassCB.ShadowTransform[i] = Spectral::Math::XMF4x4Identity();
+	}
 }
 
 GraphicsCore::GraphicsCore(UINT maxNumberOfObjects)
@@ -81,9 +85,6 @@ bool GraphicsCore::Initialize()
 	ResizeWindow();
 
 	ASSERT_HR(mCommandList->Reset(mDirectCmdListAlloc.Get(), nullptr));
-
-	// TODO: Need a way to make this dynamic, or to at least specify max number of shadow maps that can exist (is this what cascading shadow maps are for?)
-	mShadowMaps.emplace_back(md3dDevice.Get(), DXGI_FORMAT_R24G8_TYPELESS, mClientHeight, mClientWidth);
 
 	BuildRootSignature();
 	BuildShadersAndInputLayout();
@@ -187,12 +188,40 @@ void GraphicsCore::SubmitRenderPackets(const std::vector<RenderPacket*>& packets
 	assert(mAllRenderPackets.size() <= MAX_BUFFER_COUNT);
 }
 
-void GraphicsCore::SubmitSceneLights(const std::vector<Light>& lights, int beg, int end)
+void GraphicsCore::SubmitSceneLights(const std::vector<Light>& sceneLights)
 {
 	mLights.clear();
-	mLights = lights;
+	mLights = sceneLights;
 	//mLights.insert(lights.begin(), lights.begin() + beg, lights.begin() + end-1);
-	UpdateLightSRV(lights, beg, end - beg);
+}
+
+void GraphicsCore::LoadShadowMaps(std::vector<ShadowMap>& shadowMaps, const DirectX::XMINT3& shadowIndices)
+{
+	assert(shadowMaps.size() <= MAX_SHADOW_COUNT);
+	// TODO: Add assert to validate shadow indices once light indices are added
+
+	mShadowMaps = shadowMaps;
+	for (size_t i = 0; i < mShadowMaps.size(); ++i)
+	{
+		// TODO: Not scalable
+		if (mShadowMaps[i]._DepthStencilBuffer == nullptr)
+		{
+			int shadowMapHeapIndex = mShadowMapSrvOffset + i;
+			std::unique_ptr<DepthStencilBuffer> shadowBuffer = std::make_unique<DepthStencilBuffer>(md3dDevice.Get(), DXGI_FORMAT_R24G8_TYPELESS, mClientWidth, mClientHeight);
+			shadowBuffer->BuildDescriptors(
+				CD3DX12_CPU_DESCRIPTOR_HANDLE(mSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), shadowMapHeapIndex, mCbvSrvUavDescriptorSize),
+				CD3DX12_GPU_DESCRIPTOR_HANDLE(mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), shadowMapHeapIndex, mCbvSrvUavDescriptorSize),
+				CD3DX12_CPU_DESCRIPTOR_HANDLE(mDsvHeap->GetCPUDescriptorHandleForHeapStart(), mShadowPassDsvOffset + i, mDsvDescriptorSize));
+			mShadowMaps[i]._DepthStencilBuffer = shadowBuffer.get();
+			mShadowBuffers.push_back(std::move(shadowBuffer));
+
+			mShadowMaps[i].Viewport = { 0.0f, 0.0f, (float)mClientWidth, (float)mClientHeight, 0.0f, 1.0f };
+			mShadowMaps[i].ScissorRect = { 0, 0, (int)mClientWidth, (int)mClientHeight };
+		}
+	}
+
+	// Update this here since it's not used anywhere else, so there is no reason to save it.
+	mMainPassCB.NumActiveShadows = XMINT4(shadowIndices.x, shadowIndices.y, shadowIndices.z, shadowMaps.size());
 }
 
 void GraphicsCore::RenderPrePass()
@@ -240,13 +269,17 @@ void GraphicsCore::RenderPrePass()
 	FlushCommandQueue();
 }
 
+// BoundingSphere(XMFLOAT3(mLights[0].Position.x, 3, mLights[0].Position.z), 15)
 void GraphicsCore::UpdateScene(const Camera& camera)
 {
-	// TODO: Resolve for multiple shadows
-	mShadowMaps[0].UpdateShadowTransform(mLights[0], BoundingSphere(XMFLOAT3(mLights[0].Position.x, 3, mLights[0].Position.z), 15));
+	// TODO: Implement dirty bit
+	for (size_t i = 0; i < mShadowMaps.size(); ++i)
+	{
+		UpdateShadowTransform(mShadowMaps[i]);
+	}
 
-	UpdateMainPassCB(camera);
-	UpdateShadowPassCB(mShadowMaps[0]);
+	UpdateLocalMainPassCB(camera);
+	UpdateLocalShadowPassCB();
 }
 
 void GraphicsCore::RenderScene()
@@ -254,8 +287,12 @@ void GraphicsCore::RenderScene()
 	//nvtxRangePushW(L"Scene Render");
 
 	FlushCommandQueue();
-	UpdateObjectCBs(mAllRenderPackets);
-	UpdateMaterialCBs(mAllRenderPackets);
+
+	UpdateGPUMainPassCB();
+	UpdateGPUShadowPassCBs();
+	UpdateGPUObjectCBs(mAllRenderPackets);
+	UpdateGPUMaterialCBs(mAllRenderPackets);
+	UpdateGPULightSRV(mLights, 0, mLights.size());
 
 	auto cmdListAllocator = mCurrFrameResource->CmdListAlloc;
 
@@ -276,10 +313,6 @@ void GraphicsCore::RenderScene()
 	mCommandList->ClearRenderTargetView(CurrentBackBufferView(), Colors::LightSteelBlue, 0, nullptr);
 	mCommandList->ClearDepthStencilView(DepthStencilView(), D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
 
-	// TODO: Resolve to helper
-	// Specify the buffers we are going to render to.
-	mCommandList->OMSetRenderTargets(0, nullptr, true, &mShadowMaps[0].Dsv());
-
 	mCommandList->SetGraphicsRootSignature(mRootSignature.Get()); // TODO: May need to put descriptor heaps after this
 
 	ID3D12DescriptorHeap* descriptorHeaps[] = { mCbvHeap.Get() };
@@ -289,11 +322,13 @@ void GraphicsCore::RenderScene()
 
 	mCommandList->RSSetViewports(1, &mScreenViewport);
 	mCommandList->RSSetScissorRects(1, &mScissorRect);
+	// TODO: Resolve to helper
+	// Specify the buffers we are going to render to.
 	mCommandList->OMSetRenderTargets(1, &CurrentBackBufferView(), true, &DepthStencilView());
 
 	mCommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
 
-	int passCbvIndex = mPassCbvOffset + 0; // mCurrFrameResourceIndex;
+	int passCbvIndex = mMainPassCbvOffset; // mCurrFrameResourceIndex;
 	auto passCbvHandle = CD3DX12_GPU_DESCRIPTOR_HANDLE(mCbvHeap->GetGPUDescriptorHandleForHeapStart());
 	passCbvHandle.Offset(passCbvIndex, mCbvSrvUavDescriptorSize);
 	mCommandList->SetGraphicsRootDescriptorTable(0, passCbvHandle);
@@ -305,7 +340,7 @@ void GraphicsCore::RenderScene()
 	//std::vector<RenderPacket*> visibleRenderPackets;
 	//CullObjectsByFrustum(visibleRenderPackets, mOpaqueRenderPackets, cameraFrustum, camera.GetView());
 
-	// TODO: Depending upon shader refactor, it may be that one layer should correspond to one PSO
+	// Set PSO for the set of objects to be drawn and draw them.
 	for (int activePSO = 0; activePSO < NamedPSO::COUNT; ++activePSO)
 	{
 		if (mRenderPacketLayers[activePSO].empty())
@@ -348,43 +383,49 @@ void GraphicsCore::RenderScene()
 
 void GraphicsCore::RenderShadowMaps(ID3D12CommandAllocator* const cmdListAllocator)
 {
-	mCommandList->RSSetViewports(1, &mShadowMaps[0].Viewport());
-	mCommandList->RSSetScissorRects(1, &mShadowMaps[0].ScissorRect());
+	for (size_t i = 0; i < mShadowMaps.size(); ++i)
+	{
+		mCommandList->RSSetViewports(1, &mShadowMaps[i].Viewport);
+		mCommandList->RSSetScissorRects(1, &mShadowMaps[i].ScissorRect);
 
-	// Change to DEPTH_WRITE.
-	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mShadowMaps[0].Resource(),
-		D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_DEPTH_WRITE));
+		// Change to DEPTH_WRITE.
+		mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mShadowMaps[i]._DepthStencilBuffer->Resource(),
+			D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_DEPTH_WRITE));
 
-	// Clear the back buffer and depth buffer.
-	mCommandList->ClearDepthStencilView(mShadowMaps[0].Dsv(),
-		D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
+		// Clear the back buffer and depth buffer.
+		mCommandList->ClearDepthStencilView(mShadowMaps[i]._DepthStencilBuffer->Dsv(),
+			D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
 
-	// Set null render target because we are only going to draw to
-	// depth buffer.  Setting a null render target will disable color writes.
-	// Note the active PSO also must specify a render target count of 0.
-	mCommandList->OMSetRenderTargets(0, nullptr, false, &mShadowMaps[0].Dsv());
+		// Set null render target because we are only going to draw to
+		// depth buffer.  Setting a null render target will disable color writes.
+		// Note the active PSO also must specify a render target count of 0.
+		mCommandList->OMSetRenderTargets(0, nullptr, false, &mShadowMaps[i]._DepthStencilBuffer->Dsv());
 
-	// TODO: These blocks are getting repetative, consider a clean solution to encapsulate the logic and perhaps some other aspects.
-	// Bind the pass constant buffer for the shadow map pass.
-	int passCbvIndex = mPassCbvOffset + 1; // mCurrFrameResourceIndex; // TODO: Watch magic number
-	auto passCbvHandle = CD3DX12_GPU_DESCRIPTOR_HANDLE(mCbvHeap->GetGPUDescriptorHandleForHeapStart());
-	passCbvHandle.Offset(passCbvIndex, mCbvSrvUavDescriptorSize);
-	mCommandList->SetGraphicsRootDescriptorTable(0, passCbvHandle);
+		ID3D12DescriptorHeap* cbDescriptorHeaps[] = { mCbvHeap.Get() };
+		mCommandList->SetDescriptorHeaps(_countof(cbDescriptorHeaps), cbDescriptorHeaps);
 
-	// If we are doing root constants:
-	//auto passCB = mCurrFrameResource->PassCB->Resource();
-	//D3D12_GPU_VIRTUAL_ADDRESS passCBAddress = passCB->GetGPUVirtualAddress() + 1 * passCBByteSize; 
-	//mCommandList->SetGraphicsRootConstantBufferView(1, passCBAddress);
+		// TODO: These blocks are getting repetative, consider a clean solution to encapsulate the logic and perhaps some other aspects.
+		// Bind the pass constant buffer for the shadow map pass.
+		int passCbvIndex = mShadowPassCbvOffset + i; // mCurrFrameResourceIndex;
+		auto passCbvHandle = CD3DX12_GPU_DESCRIPTOR_HANDLE(mCbvHeap->GetGPUDescriptorHandleForHeapStart());
+		passCbvHandle.Offset(passCbvIndex, mCbvSrvUavDescriptorSize);
+		mCommandList->SetGraphicsRootDescriptorTable(0, passCbvHandle);
 
-	mCommandList->SetPipelineState(mInternalPSOs[_InternalPSO::ShadowMap][PSOVariant::Default].Get());
+		// If we are doing root constants:
+		//auto passCB = mCurrFrameResource->PassCB->Resource();
+		//D3D12_GPU_VIRTUAL_ADDRESS passCBAddress = passCB->GetGPUVirtualAddress() + 1 * passCBByteSize; 
+		//mCommandList->SetGraphicsRootConstantBufferView(1, passCBAddress);
 
-	// TODO: Depending upon shader refactor, it may be that one layer should correspond to one PSO
-	DrawRenderItems(mCommandList.Get(), cmdListAllocator, mRenderPacketLayers[NamedPSO::DefaultWithShadows], RenderTechnique::Standard);
-	DrawRenderItems(mCommandList.Get(), cmdListAllocator, mRenderPacketLayers[NamedPSO::NormalMapWithShadows], RenderTechnique::Standard);
+		mCommandList->SetPipelineState(mInternalPSOs[_InternalPSO::ShadowMap][PSOVariant::Default].Get());
 
-	// Change back to GENERIC_READ so we can read the texture in a shader.
-	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mShadowMaps[0].Resource(),
-		D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_GENERIC_READ));
+		// TODO: Depending upon shader refactor, it may be that one layer should correspond to one PSO
+		DrawRenderItems(mCommandList.Get(), cmdListAllocator, mRenderPacketLayers[NamedPSO::DefaultWithShadows], RenderTechnique::Standard);
+		DrawRenderItems(mCommandList.Get(), cmdListAllocator, mRenderPacketLayers[NamedPSO::NormalMapWithShadows], RenderTechnique::Standard);
+
+		// Change back to GENERIC_READ so we can read the texture in a shader.
+		mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mShadowMaps[i]._DepthStencilBuffer->Resource(),
+			D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_GENERIC_READ));
+	}
 }
 
 bool GraphicsCore::InitDirect3D()
@@ -526,9 +567,11 @@ void GraphicsCore::CreateCommandEntities()
 	heapDesc.NodeMask = 0;
 	ASSERT_HR(md3dDevice->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(mRtvHeap.GetAddressOf())));
 
-	heapDesc.NumDescriptors = 2; // Traditional back buffer + shadow map
+	heapDesc.NumDescriptors = 1 + MAX_SHADOW_COUNT; // Traditional back buffer + shadow maps
 	heapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
 	ASSERT_HR(md3dDevice->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(mDsvHeap.GetAddressOf())));
+
+	mShadowPassDsvOffset = 1;
 }
 
 void GraphicsCore::CreateSwapChain()
@@ -583,8 +626,94 @@ void GraphicsCore::FlushCommandQueue()
 	//nvtxRangePop();
 }
 
+void GraphicsCore::UpdateLocalMainPassCB(const Camera& camera)
+{
+	// This is overkill for now, but may prove useful in the future if I decide to keep per-pass CBs
+	XMMATRIX view = camera.GetView();
+	XMMATRIX proj = camera.GetProj();
+
+	XMMATRIX viewProj = XMMatrixMultiply(view, proj);
+	XMMATRIX invView = XMMatrixInverse(&XMMatrixDeterminant(view), view);
+	XMMATRIX invProj = XMMatrixInverse(&XMMatrixDeterminant(proj), proj);
+	XMMATRIX invViewProj = XMMatrixInverse(&XMMatrixDeterminant(viewProj), viewProj);
+
+	DirectX::XMStoreFloat4x4(&mMainPassCB.View, XMMatrixTranspose(view));
+	DirectX::XMStoreFloat4x4(&mMainPassCB.InvView, XMMatrixTranspose(invView));
+	DirectX::XMStoreFloat4x4(&mMainPassCB.Proj, XMMatrixTranspose(proj));
+	DirectX::XMStoreFloat4x4(&mMainPassCB.InvProj, XMMatrixTranspose(invProj));
+	DirectX::XMStoreFloat4x4(&mMainPassCB.ViewProj, XMMatrixTranspose(viewProj));
+	DirectX::XMStoreFloat4x4(&mMainPassCB.InvViewProj, XMMatrixTranspose(invViewProj));
+	for (int i = 0; i < mShadowMaps.size(); ++i)
+	{
+		XMMATRIX shadowTransform = XMLoadFloat4x4(&mShadowMaps[i].ShadowTransform);
+		DirectX::XMStoreFloat4x4(&mMainPassCB.ShadowTransform[i], XMMatrixTranspose(shadowTransform));
+	}
+	mMainPassCB.EyePosW = camera.GetPosition3f();
+	if (mShadowMaps.size() < 1)
+	{
+		// This is normally updated when shadows are submitted, and the value doesn't change elsewhere.
+		// If no shadows are active then we need to make sure this value is 0s.
+		mMainPassCB.NumActiveShadows = DirectX::XMINT4(0, 0, 0, 0);
+	}
+	mMainPassCB.RenderTargetSize = XMFLOAT2((float)mClientWidth, (float)mClientHeight);
+	mMainPassCB.InvRenderTargetSize = XMFLOAT2(1.0f / mClientWidth, 1.0f / mClientHeight);
+	mMainPassCB.NearZ = 1.0f;
+	mMainPassCB.FarZ = 1000.0f;
+	mMainPassCB.TotalTime = 1;// gt.TotalTime(); //TODO: If this stays, need to have time access
+	mMainPassCB.DeltaTime = 1;// gt.DeltaTime();
+	// TODO: Add ambient light term
+}
+
+void GraphicsCore::UpdateLocalShadowPassCB()
+{
+
+}
+
+void GraphicsCore::UpdateGPUMainPassCB()
+{
+	//nvtxRangePushW(L"Update MPCB");
+
+	auto currPassCB = mCurrFrameResource->PassCB.get();
+	currPassCB->CopyData(0, mMainPassCB);
+
+	//nvtxRangePop();
+}
+
+void GraphicsCore::UpdateGPUShadowPassCBs()
+{
+	for (size_t i = 0; i < mShadowMaps.size(); ++i)
+	{
+		XMMATRIX view = XMLoadFloat4x4(&mShadowMaps[i].LightView);
+		XMMATRIX proj = XMLoadFloat4x4(&mShadowMaps[i].LightProj);
+
+		XMMATRIX viewProj = XMMatrixMultiply(view, proj);
+		XMMATRIX invView = XMMatrixInverse(&XMMatrixDeterminant(view), view);
+		XMMATRIX invProj = XMMatrixInverse(&XMMatrixDeterminant(proj), proj);
+		XMMATRIX invViewProj = XMMatrixInverse(&XMMatrixDeterminant(viewProj), viewProj);
+
+		UINT dsbWidth = mShadowMaps[i]._DepthStencilBuffer->Width();
+		UINT dsbHeight = mShadowMaps[i]._DepthStencilBuffer->Height();
+
+		XMStoreFloat4x4(&mShadowPassCBs[i].View, XMMatrixTranspose(view));
+		XMStoreFloat4x4(&mShadowPassCBs[i].InvView, XMMatrixTranspose(invView));
+		XMStoreFloat4x4(&mShadowPassCBs[i].Proj, XMMatrixTranspose(proj));
+		XMStoreFloat4x4(&mShadowPassCBs[i].InvProj, XMMatrixTranspose(invProj));
+		XMStoreFloat4x4(&mShadowPassCBs[i].ViewProj, XMMatrixTranspose(viewProj));
+		XMStoreFloat4x4(&mShadowPassCBs[i].InvViewProj, XMMatrixTranspose(invViewProj));
+		mShadowPassCBs[i].EyePosW = mShadowMaps[i].LightVirtualPosW;
+		mShadowPassCBs[i].RenderTargetSize = XMFLOAT2((float)dsbWidth, (float)dsbHeight);
+		mShadowPassCBs[i].InvRenderTargetSize = XMFLOAT2(1.0f / dsbWidth, 1.0f / dsbHeight);
+		mShadowPassCBs[i].NearZ = mShadowMaps[i].LightNearZ;
+		mShadowPassCBs[i].FarZ = mShadowMaps[i].LightFarZ;
+
+		// TODO: Refactor gpu sets to single function
+		auto currPassCB = mCurrFrameResource->PassCB.get();
+		currPassCB->CopyData(1 + i, mShadowPassCBs[i]); // TODO: FIX MAGIC
+	}
+}
+
 // TODO: Refactor update methods into manager classes
-void GraphicsCore::UpdateObjectCBs(const std::vector<RenderPacket*>& packets)
+void GraphicsCore::UpdateGPUObjectCBs(const std::vector<RenderPacket*>& packets)
 {
 	//nvtxRangePushW(L"Update OCBs");
 
@@ -599,14 +728,14 @@ void GraphicsCore::UpdateObjectCBs(const std::vector<RenderPacket*>& packets)
 		{
 			XMMATRIX world = XMLoadFloat4x4(&(packets[bufferIndex]->World));
 			XMMATRIX texTransform = XMLoadFloat4x4(&(packets[bufferIndex]->TexTransform));
-	
+
 			ObjectConstants objConstants;
 			DirectX::XMStoreFloat4x4(&objConstants.World, XMMatrixTranspose(world));
 			XMStoreFloat4x4(&objConstants.TexTransform, XMMatrixTranspose(texTransform));
 
 			currObjectCB->CopyData(bufferIndex, objConstants);
 
-			packets[bufferIndex]->ObjectCBIndex = bufferIndex;
+			packets[bufferIndex]->_ObjectCBIndex = bufferIndex;
 			packets[bufferIndex]->ObjectDirtyForFrame = false;
 		}
 	}
@@ -614,7 +743,7 @@ void GraphicsCore::UpdateObjectCBs(const std::vector<RenderPacket*>& packets)
 	//nvtxRangePop();
 }
 
-void GraphicsCore::UpdateMaterialCBs(const std::vector<RenderPacket*>& packets)
+void GraphicsCore::UpdateGPUMaterialCBs(const std::vector<RenderPacket*>& packets)
 {
 	//nvtxRangePushW(L"Update MCBs");
 
@@ -641,7 +770,7 @@ void GraphicsCore::UpdateMaterialCBs(const std::vector<RenderPacket*>& packets)
 
 			currMaterialCB->CopyData(bufferIndex, matConstants);
 
-			packets[bufferIndex]->MaterialCBIndex = bufferIndex;
+			packets[bufferIndex]->_MaterialCBIndex = bufferIndex;
 			packets[bufferIndex]->MaterialDirtyForFrame = false;
 		}
 	}
@@ -649,81 +778,13 @@ void GraphicsCore::UpdateMaterialCBs(const std::vector<RenderPacket*>& packets)
 	//nvtxRangePop();
 }
 
-void GraphicsCore::UpdateMainPassCB(const Camera& camera)
-{
-	//nvtxRangePushW(L"Update MPCB");
-
-	// This is overkill for now, but may prove useful in the future if
-	// I decide to keep per-pass CBs
-	XMMATRIX view = camera.GetView();
-	XMMATRIX proj = camera.GetProj();
-
-	XMMATRIX viewProj = XMMatrixMultiply(view, proj);
-	XMMATRIX invView = XMMatrixInverse(&XMMatrixDeterminant(view), view);
-	XMMATRIX invProj = XMMatrixInverse(&XMMatrixDeterminant(proj), proj);
-	XMMATRIX invViewProj = XMMatrixInverse(&XMMatrixDeterminant(viewProj), viewProj);
-
-	XMMATRIX shadowTransform = XMLoadFloat4x4(&mShadowMaps[0].mShadowTransform);
-
-	DirectX::XMStoreFloat4x4(&mMainPassCB.View, XMMatrixTranspose(view));
-	DirectX::XMStoreFloat4x4(&mMainPassCB.InvView, XMMatrixTranspose(invView));
-	DirectX::XMStoreFloat4x4(&mMainPassCB.Proj, XMMatrixTranspose(proj));
-	DirectX::XMStoreFloat4x4(&mMainPassCB.InvProj, XMMatrixTranspose(invProj));
-	DirectX::XMStoreFloat4x4(&mMainPassCB.ViewProj, XMMatrixTranspose(viewProj));
-	DirectX::XMStoreFloat4x4(&mMainPassCB.InvViewProj, XMMatrixTranspose(invViewProj));
-	DirectX::XMStoreFloat4x4(&mMainPassCB.ShadowTransform, XMMatrixTranspose(shadowTransform));
-	mMainPassCB.EyePosW = camera.GetPosition3f();
-	mMainPassCB.NumActiveLights = 10;
-	mMainPassCB.RenderTargetSize = XMFLOAT2((float)mClientWidth, (float)mClientHeight);
-	mMainPassCB.InvRenderTargetSize = XMFLOAT2(1.0f / mClientWidth, 1.0f / mClientHeight);
-	mMainPassCB.NearZ = 1.0f;
-	mMainPassCB.FarZ = 1000.0f;
-	mMainPassCB.TotalTime = 1;// gt.TotalTime(); //TODO: If this stays, need to have time access
-	mMainPassCB.DeltaTime = 1;// gt.DeltaTime();
-	// TODO: Add ambient light term
-
-	auto currPassCB = mCurrFrameResource->PassCB.get();
-	currPassCB->CopyData(0, mMainPassCB);
-
-	//nvtxRangePop();
-}
-
-void GraphicsCore::UpdateLightSRV(const std::vector<Light>& lights, int startIndex, int numToUpdate)
+void GraphicsCore::UpdateGPULightSRV(const std::vector<Light>& lights, int startIndex, int numToUpdate)
 {
 	assert(numToUpdate <= MAX_LIGHTS);
-	auto lightSB = mCurrFrameResource->LightSB.get();
-
 	assert(UINT64(startIndex) + numToUpdate <= lights.size());
+
+	auto lightSB = mCurrFrameResource->LightSB.get();
 	lightSB->CopyData(0, numToUpdate, lights[startIndex]);
-}
-
-void GraphicsCore::UpdateShadowPassCB(const DepthStencilBuffer::ShadowMap& map)
-{
-	XMMATRIX view = XMLoadFloat4x4(&map.mLightView);
-	XMMATRIX proj = XMLoadFloat4x4(&map.mLightProj);
-
-	XMMATRIX viewProj = XMMatrixMultiply(view, proj);
-	XMMATRIX invView = XMMatrixInverse(&XMMatrixDeterminant(view), view);
-	XMMATRIX invProj = XMMatrixInverse(&XMMatrixDeterminant(proj), proj);
-	XMMATRIX invViewProj = XMMatrixInverse(&XMMatrixDeterminant(viewProj), viewProj);
-
-	UINT w = map.Width();
-	UINT h = map.Height();
-
-	XMStoreFloat4x4(&mShadowPassCB.View, XMMatrixTranspose(view));
-	XMStoreFloat4x4(&mShadowPassCB.InvView, XMMatrixTranspose(invView));
-	XMStoreFloat4x4(&mShadowPassCB.Proj, XMMatrixTranspose(proj));
-	XMStoreFloat4x4(&mShadowPassCB.InvProj, XMMatrixTranspose(invProj));
-	XMStoreFloat4x4(&mShadowPassCB.ViewProj, XMMatrixTranspose(viewProj));
-	XMStoreFloat4x4(&mShadowPassCB.InvViewProj, XMMatrixTranspose(invViewProj));
-	mShadowPassCB.EyePosW = map.mLightVirtualPosW;
-	mShadowPassCB.RenderTargetSize = XMFLOAT2((float)w, (float)h);
-	mShadowPassCB.InvRenderTargetSize = XMFLOAT2(1.0f / w, 1.0f / h);
-	mShadowPassCB.NearZ = map.mLightNearZ;
-	mShadowPassCB.FarZ = map.mLightFarZ;
-
-	auto currPassCB = mCurrFrameResource->PassCB.get();
-	currPassCB->CopyData(1, mShadowPassCB); // TODO: FIX MAGIC
 }
 
 void GraphicsCore::CullObjectsByFrustum(std::vector<RenderPacket*>& visible, const std::vector<RenderPacket*>& objects, const DirectX::BoundingFrustum& frustum, FXMMATRIX view)
@@ -826,15 +887,16 @@ void GraphicsCore::BuildDescriptorHeaps()
 	// performance and flexibility the number of buffers is fixed.
 	UINT bufferCount = MAX_BUFFER_COUNT;
 
-	// Need 2 CBV descriptors for each object for each frame resource,
-	// +1 for the perPass CBV for each frame resource. The per object
-	// descriptors are for the material and object CBs respectively.
+	// Need 2 CBV descriptors for each object for each frame resource (Material and Object CBV),
+	// +1 for the perPass CBV and + MAX_SHADOW_COUNT for the shadow pass CBVs, for each frame resource.
+	// TODO: Reorder these with the root signature changed.
 	// HEAP: [PassConstants][ShadowPassConstants][MaterialConstants][ObjectConstants]
-	UINT numDescriptors = ((bufferCount * 2) + 2) * gNumFrameResources;
+	UINT numDescriptors = ((bufferCount * 2) + 1 + MAX_SHADOW_COUNT) * gNumFrameResources;
 
 	// TODO: Reverse current setup so that Pass is actually last and not first: Test performance
-	// Save an offset to the start of the pass CBVs.  These are the last 3 descriptors.
-	mPassCbvOffset = 0; // bufferCount * gNumFrameResources;
+	// Save an offset to the start of the pass CBVs.  These are (NOT YET) the last descriptors.
+	mMainPassCbvOffset = 0; // bufferCount * gNumFrameResources;
+	mShadowPassCbvOffset = mMainPassCbvOffset + 1;
 
 	// Create the heap for CBVs.
 	D3D12_DESCRIPTOR_HEAP_DESC cbvHeapDesc;
@@ -850,7 +912,7 @@ void GraphicsCore::BuildDescriptorHeaps()
 	// TODO: REMOVE MAGIC CONSTANTS
 	// Create the SRV heap for textures.
 	D3D12_DESCRIPTOR_HEAP_DESC textureHeapDesc = {};
-	textureHeapDesc.NumDescriptors = 3 + 3 + 1 + 1 + 2; // 3 textures + 3 normal maps (will be configurable soon (maybe)) + cube map + shadowMap + 2 null descriptors
+	textureHeapDesc.NumDescriptors = 3 + 3 + 1 + MAX_SHADOW_COUNT + 2; // 3 textures + 3 normal maps (will be configurable soon (maybe)) + cube map + shadowMaps + 2 null descriptors
 	textureHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 	textureHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 	ASSERT_HR(md3dDevice->CreateDescriptorHeap(&textureHeapDesc, IID_PPV_ARGS(&mSrvDescriptorHeap)));
@@ -868,7 +930,7 @@ void GraphicsCore::BuildConstantBufferViews()
 		D3D12_GPU_VIRTUAL_ADDRESS cbAddress = passCB->GetGPUVirtualAddress();
 
 		// Offset to the pass cbv in the descriptor heap.
-		int heapIndex = mPassCbvOffset + 0; // frameIndex;
+		int heapIndex = mMainPassCbvOffset + 0; // frameIndex;
 		auto handle = CD3DX12_CPU_DESCRIPTOR_HANDLE(mCbvHeap->GetCPUDescriptorHandleForHeapStart());
 		handle.Offset(heapIndex, mCbvSrvUavDescriptorSize);
 
@@ -877,11 +939,16 @@ void GraphicsCore::BuildConstantBufferViews()
 		cbvDesc.SizeInBytes = mPassCBByteSize;
 
 		md3dDevice->CreateConstantBufferView(&cbvDesc, handle);
-		handle.Offset(1, mCbvSrvUavDescriptorSize);
-		cbvDesc.BufferLocation += mPassCBByteSize;
-		md3dDevice->CreateConstantBufferView(&cbvDesc, handle);
 
-
+		handle = CD3DX12_CPU_DESCRIPTOR_HANDLE(mCbvHeap->GetCPUDescriptorHandleForHeapStart());
+		handle.Offset(mShadowPassCbvOffset, mCbvSrvUavDescriptorSize);
+		for (int i = 0; i < MAX_SHADOW_COUNT; ++i)
+		{
+			cbvDesc.BufferLocation += mPassCBByteSize;
+			md3dDevice->CreateConstantBufferView(&cbvDesc, handle);
+			// Go to the next descriptor
+			handle.Offset(1, mCbvSrvUavDescriptorSize);
+		}
 	//}
 
 	// Need a CBV descriptor for each object for each frame resource.
@@ -896,7 +963,7 @@ void GraphicsCore::BuildConstantBufferViews()
 			cbAddress += i * mMaterialCBByteSize;
 
 			// Offset to the object cbv in the descriptor heap.
-			int heapIndex = /*frameIndex*/(0 * objCount) + i + gNumFrameResources + 1;
+			int heapIndex = /*frameIndex*/(0 * objCount) + i + gNumFrameResources + MAX_SHADOW_COUNT; // obj index + pass CB + shadow pass CBs
 			auto handle = CD3DX12_CPU_DESCRIPTOR_HANDLE(mCbvHeap->GetCPUDescriptorHandleForHeapStart());
 			handle.Offset(heapIndex, mCbvSrvUavDescriptorSize);
 
@@ -920,7 +987,7 @@ void GraphicsCore::BuildConstantBufferViews()
 			cbAddress += i * mObjectCBByteSize;
 
 			// Offset to the object cbv in the descriptor heap.
-			int heapIndex = /*frameIndex*/ objCount + i + gNumFrameResources + 1;
+			int heapIndex = /*frameIndex*/ objCount + i + gNumFrameResources + MAX_SHADOW_COUNT;
 			auto handle = CD3DX12_CPU_DESCRIPTOR_HANDLE(mCbvHeap->GetCPUDescriptorHandleForHeapStart());
 			handle.Offset(heapIndex, mCbvSrvUavDescriptorSize);
 
@@ -935,9 +1002,9 @@ void GraphicsCore::BuildConstantBufferViews()
 	// --- Shader Resrouce Views ---
 	// TOOD: SERIOUSLY REMOVE THIS MAGIC CONSTANT
 	UINT mSkyTexHeapIndex = 6; // (UINT)tex2DList.size();
-	UINT mShadowMapHeapIndex = mSkyTexHeapIndex + 1;
+	mShadowMapSrvOffset = mSkyTexHeapIndex + 1;
 
-	auto mNullCubeSrvIndex = mShadowMapHeapIndex + 1;
+	auto mNullCubeSrvIndex = mShadowMapSrvOffset + MAX_SHADOW_COUNT;
 	auto mNullTexSrvIndex = mNullCubeSrvIndex + 1;
 
 	auto srvCpuStart = mSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
@@ -965,11 +1032,6 @@ void GraphicsCore::BuildConstantBufferViews()
 	srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
 
 	md3dDevice->CreateShaderResourceView(nullptr, &srvDesc, nullSrv);
-
-	mShadowMaps[0].BuildDescriptors(
-		CD3DX12_CPU_DESCRIPTOR_HANDLE(srvCpuStart, mShadowMapHeapIndex, mCbvSrvUavDescriptorSize),
-		CD3DX12_GPU_DESCRIPTOR_HANDLE(srvGpuStart, mShadowMapHeapIndex, mCbvSrvUavDescriptorSize),
-		CD3DX12_CPU_DESCRIPTOR_HANDLE(dsvCpuStart, 1, mDsvDescriptorSize));
 }
 
 // TODO: Take in parameterized list to build shaders
@@ -1077,7 +1139,7 @@ void GraphicsCore::BuildFrameResources()
 	//for (int i = 0; i < gNumFrameResources; ++i)
 	//{
 		mCurrFrameResource = new FrameResource(md3dDevice.Get(),
-		2, (UINT)MAX_BUFFER_COUNT, MAX_LIGHTS); // TODO: Test 1 vs 2 pass CB for shadows (i.e. the same pass buffer)
+		1 + MAX_SHADOW_COUNT, (UINT)MAX_BUFFER_COUNT, MAX_LIGHTS); // TODO: Test 1 vs 2 pass CB for shadows (i.e. the same pass buffer)
 	//}
 }
 
@@ -1111,7 +1173,7 @@ void GraphicsCore::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, ID3D12Com
 		//         D3D12_GPU_VIRTUAL_ADDRESS objCBAddress = objectCB->GetGPUVirtualAddress() + ri->ObjCBIndex*objCBByteSize;
 
 		// Offset to the CBV in the descriptor heap for this object's material and for this frame resource.
-		UINT cbvIndex = /*mCurrFrameResourceIndex*//*0*(UINT)mOpaqueRenderPackets.size() + */renderPacket->ObjectCBIndex + gNumFrameResources + 1;
+		UINT cbvIndex = /*mCurrFrameResourceIndex*//*0*(UINT)mOpaqueRenderPackets.size() + */renderPacket->_ObjectCBIndex + gNumFrameResources + MAX_SHADOW_COUNT;
 		auto cbvHandle = CD3DX12_GPU_DESCRIPTOR_HANDLE(mCbvHeap->GetGPUDescriptorHandleForHeapStart());
 		cbvHandle.Offset(cbvIndex, mCbvSrvUavDescriptorSize);
 
@@ -1120,7 +1182,7 @@ void GraphicsCore::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, ID3D12Com
 
 		// TODO: Fix to putting passCB index after all objects and materials
 		// Offset to the CBV in the descriptor heap for this object and for this frame resource.
-		cbvIndex = /*mCurrFrameResourceIndex*//*0*(UINT)mOpaqueRenderPackets.size() + */renderPacket->MaterialCBIndex + MAX_BUFFER_COUNT + gNumFrameResources + 1; // TODO: Refacor index location into either a class or utility helper method
+		cbvIndex = /*mCurrFrameResourceIndex*//*0*(UINT)mOpaqueRenderPackets.size() + */renderPacket->_MaterialCBIndex + MAX_BUFFER_COUNT + gNumFrameResources + MAX_SHADOW_COUNT; // TODO: Refacor index location into either a class or utility helper method
 		cbvHandle = CD3DX12_GPU_DESCRIPTOR_HANDLE(mCbvHeap->GetGPUDescriptorHandleForHeapStart());
 		cbvHandle.Offset(cbvIndex, mCbvSrvUavDescriptorSize);
 
@@ -1143,6 +1205,7 @@ void GraphicsCore::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, ID3D12Com
 		cmdList->SetGraphicsRootDescriptorTable(4, tex);
 		if (renderTechnique != RenderTechnique::Sky)
 		{
+			// TODO: This does NOT need to be set every time as shadows are now an array and drawn all at once in shader.
 			tex = (mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 			tex.Offset(6, mCbvSrvUavDescriptorSize);
 			cmdList->SetGraphicsRootDescriptorTable(4, tex);
@@ -1171,12 +1234,14 @@ void GraphicsCore::BuildRootSignature()
 	texTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 2, 0); // texture + normal
 
 	CD3DX12_DESCRIPTOR_RANGE texTable1;
-	texTable1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 2, 2); // sky map
+	// TODO: Reverse
+	texTable1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1 + MAX_SHADOW_COUNT, 2); // sky map + shadow maps
 
 	// Root parameter can be a table, root descriptor or root constants.
 	const int slotCount = 6;
 	CD3DX12_ROOT_PARAMETER slotRootParameter[slotCount];
 
+	// TODO: Shadow SB
 	// TODO: Reverse order and test performance
 	// Consider: obj : pass : mat : sky map and shadow map (in 1 root slot, 2 descriptors): obj textures : (and shove lights somewhere)
 	// Also see: https://software.intel.com/en-us/articles/performance-considerations-for-resource-binding-in-microsoft-directx-12

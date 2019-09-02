@@ -20,10 +20,11 @@
 // TODO: Factor CB system into central CB class which manages the indicies into the buffer memory instead of the structures.
 // TODO: Compile and manage shaders outside of the low-level renderer?
 
+#include "DepthStencilBuffer.h"
+#include "FrameResource.h"
 #include "Mesh.h"
 #include "RenderPacket.h"
-#include "FrameResource.h"
-#include "DepthStencilBuffer.h"
+#include "ShadowMap.h"
 #include "Common/Camera.h"
 
 extern const int gNumFrameResources;
@@ -32,6 +33,7 @@ namespace Spectral
 {
 	namespace Graphics
 	{
+		using namespace Spectral::Graphics;
 		// NOTE: This class is still being prototyped and designed.
 		class GraphicsCore
 		{
@@ -51,8 +53,14 @@ namespace Spectral
 			// Potential Feature: Support runtime switching of render window
 
 			void SubmitRenderPackets(const std::vector<RenderPacket*>& packets, NamedPSO targetPSO);
-			void SubmitSceneLights(const std::vector<Light>& lights, int beg, int end);
-			// /*virtual*/ LRESULT MsgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
+			// TODO: Light type end indices
+			void SubmitSceneLights(const std::vector<Light>& sceneLights);
+			// TODO: Make pointer?
+			void LoadShadowMaps(std::vector<ShadowMap>& shadowMaps, const DirectX::XMINT3& shadowIndices);
+			void LoadTextures(std::vector<Texture*>& texes);
+			void SubmitSceneTextures(std::vector<Texture*>& texes, std::vector<short>& viewIndicies);
+
+			// LRESULT MsgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 			void RenderPrePass(/*const Timer& gt*/);
 			void UpdateScene(const Camera& camera);
 			void RenderScene();
@@ -61,8 +69,6 @@ namespace Spectral
 			Microsoft::WRL::ComPtr<ID3D12Resource> CreateDefaultBuffer(/*ID3D12Device* device, ID3D12GraphicsCommandList* cmdList,*/
 					const void* initData, INT64 byteSize, Microsoft::WRL::ComPtr<ID3D12Resource>& uploadBuffer);
 
-			void LoadTextures(std::vector<Texture*>& texes);
-			void SubmitSceneTextures(std::vector<Texture*>& texes, std::vector<short>& viewIndicies);
 
 			void Resize(int width, int height);
 			void SetFullScreen(bool set);
@@ -98,11 +104,13 @@ namespace Spectral
 			// It might be useful in the future to expose this
 			void RenderShadowMaps(ID3D12CommandAllocator* cmdListAllocator);
 
-			void UpdateMainPassCB(const Camera& camera);
-			void UpdateObjectCBs(const std::vector<RenderPacket*>& packets);
-			void UpdateMaterialCBs(const std::vector<RenderPacket*>& packets);
-			void UpdateShadowPassCB(const DepthStencilBuffer::ShadowMap& map); // TODO: Move
-			void UpdateLightSRV(const std::vector<Light>& lights, int startIndex, int numToUpdate);
+			void UpdateLocalMainPassCB(const Camera& camera);
+			void UpdateLocalShadowPassCB();
+			void UpdateGPUMainPassCB();
+			void UpdateGPUShadowPassCBs();
+			void UpdateGPUObjectCBs(const std::vector<RenderPacket*>& packets);
+			void UpdateGPUMaterialCBs(const std::vector<RenderPacket*>& packets);
+			void UpdateGPULightSRV(const std::vector<Light>& lights, int startIndex, int numToUpdate);
 
 			void CullObjectsByFrustum(std::vector<RenderPacket*>& visible, const std::vector<RenderPacket*>& objects,
 				const DirectX::BoundingFrustum& frustum, FXMMATRIX view);
@@ -116,6 +124,19 @@ namespace Spectral
 
 			void FlushCommandQueue();
 
+		private:
+			struct _InternalPSO
+			{
+				_InternalPSO() = delete;
+
+				enum Value : int
+				{
+					ShadowMap = 0,
+					COUNT,
+					NONE
+				};
+			};
+			typedef typename _InternalPSO::Value InternalPSO;
 
 		private:
 			static GraphicsCore* mGraphicsCore;
@@ -132,6 +153,8 @@ namespace Spectral
 			//UINT      m4xMsaaQuality = 0;
 
 			const UINT MAX_BUFFER_COUNT = 4096;
+			// Right now this is defined externally, but ideally it will be runtime configurable like buffer counts
+			//const UINT MAX_SHADOW_COUNT = 16;
 			const UINT mObjectCBByteSize = CalcConstantBufferByteSize(sizeof(ObjectConstants));
 			const UINT mMaterialCBByteSize = CalcConstantBufferByteSize(sizeof(MaterialConstants));
 			const UINT mPassCBByteSize = CalcConstantBufferByteSize(sizeof(PassConstants));
@@ -173,12 +196,17 @@ namespace Spectral
 			std::vector<RenderPacket*> mAllRenderPackets;
 
 			PassConstants mMainPassCB;
-			PassConstants mShadowPassCB;
+			std::vector<PassConstants> mShadowPassCBs = std::vector<PassConstants>(MAX_SHADOW_COUNT);
 
-			UINT mPassCbvOffset = 0;
+			UINT mMainPassCbvOffset = 0;
+			UINT mShadowPassCbvOffset = 0;
+			UINT mShadowPassDsvOffset = 0;
+			UINT mShadowMapSrvOffset = 0;
 
+			// TODO: Should these be pointers for performance?
 			std::vector<Light> mLights;
-			std::deque<DepthStencilBuffer::ShadowMap> mShadowMaps;
+			std::vector<std::unique_ptr<DepthStencilBuffer>> mShadowBuffers;
+			std::vector<ShadowMap> mShadowMaps;
 
 			bool mIsWireframe = false;
 

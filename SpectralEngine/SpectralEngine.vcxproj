@@ -35,6 +35,7 @@
     <ClInclude Include="Graphics\Mesh.h" />
     <ClInclude Include="Graphics\RenderPacket.h" />
     <ClInclude Include="Graphics\DepthStencilBuffer.h" />
+    <ClInclude Include="Graphics\ShadowMap.h" />
     <ClInclude Include="Microsoft\d3dx12.h" />
     <ClInclude Include="Microsoft\DDSTextureLoader.h" />
     <ClInclude Include="Scene\SceneManager.h" />
@@ -55,6 +56,7 @@
     <ClCompile Include="Graphics\Mesh.cpp" />
     <ClCompile Include="Graphics\RenderPacket.cpp" />
     <ClCompile Include="Graphics\DepthStencilBuffer.cpp" />
+    <ClCompile Include="Graphics\ShadowMap.cpp" />
     <ClCompile Include="Microsoft\DDSTextureLoader.cpp" />
     <ClCompile Include="Run.cpp" />
     <ClCompile Include="Scene\SceneManager.cpp" />
