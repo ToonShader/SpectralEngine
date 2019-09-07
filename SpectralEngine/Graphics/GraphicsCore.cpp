@@ -207,6 +207,7 @@ void GraphicsCore::LoadShadowMaps(std::vector<ShadowMap>& shadowMaps, const Dire
 		if (mShadowMaps[i]._DepthStencilBuffer == nullptr)
 		{
 			int shadowMapHeapIndex = mShadowMapSrvOffset + i;
+			// TODO: Not using stencil buffer for shadows, should switch to R32 format.
 			std::unique_ptr<DepthStencilBuffer> shadowBuffer = std::make_unique<DepthStencilBuffer>(md3dDevice.Get(), DXGI_FORMAT_R24G8_TYPELESS, mClientWidth, mClientHeight);
 			shadowBuffer->BuildDescriptors(
 				CD3DX12_CPU_DESCRIPTOR_HANDLE(mSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), shadowMapHeapIndex, mCbvSrvUavDescriptorSize),
@@ -643,7 +644,7 @@ void GraphicsCore::UpdateLocalMainPassCB(const Camera& camera)
 	DirectX::XMStoreFloat4x4(&mMainPassCB.InvProj, XMMatrixTranspose(invProj));
 	DirectX::XMStoreFloat4x4(&mMainPassCB.ViewProj, XMMatrixTranspose(viewProj));
 	DirectX::XMStoreFloat4x4(&mMainPassCB.InvViewProj, XMMatrixTranspose(invViewProj));
-	for (int i = 0; i < mShadowMaps.size(); ++i)
+	for (size_t i = 0; i < mShadowMaps.size(); ++i)
 	{
 		XMMATRIX shadowTransform = XMLoadFloat4x4(&mShadowMaps[i].ShadowTransform);
 		DirectX::XMStoreFloat4x4(&mMainPassCB.ShadowTransform[i], XMMatrixTranspose(shadowTransform));
@@ -1098,8 +1099,8 @@ void GraphicsCore::BuildPSOs()
 
 	// --- INTERNAL PSOs for rendering shadow maps W/O alpha clipping ---
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC shadowMapPSODesc = commonPSODesc;
-	shadowMapPSODesc.RasterizerState.DepthBias = 100000;
-	shadowMapPSODesc.RasterizerState.DepthBiasClamp = 0.0f;
+	shadowMapPSODesc.RasterizerState.DepthBias = 100;
+	shadowMapPSODesc.RasterizerState.DepthBiasClamp = 0.0001f;
 	shadowMapPSODesc.RasterizerState.SlopeScaledDepthBias = 1.0f;
 	shadowMapPSODesc.VS =
 	{

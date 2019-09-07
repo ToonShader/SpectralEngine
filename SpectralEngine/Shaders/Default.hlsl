@@ -6,7 +6,7 @@
 
 // Defaults for number of lights.
 #ifndef NUM_DIR_LIGHTS
-    #define NUM_DIR_LIGHTS 3
+    #define NUM_DIR_LIGHTS 0
 #endif
 
 #ifndef NUM_POINT_LIGHTS
@@ -14,7 +14,7 @@
 #endif
 
 #ifndef NUM_SPOT_LIGHTS
-    #define NUM_SPOT_LIGHTS 0
+    #define NUM_SPOT_LIGHTS 3
 #endif
 
 #define MAX_SHADOW_COUNT 16
@@ -169,14 +169,18 @@ float4 PS(VertexOut pin) : SV_Target
 	float4 ambient = gAmbientLight * diffuseAlbedo;// gDiffuseAlbedo;
 
 	float shadowFactors[MAX_SHADOW_COUNT];
-#ifdef SHADOW_MAPPED
+
 	// Only the first light casts a shadow.
 	[loop]
 	for (int i = 0; i < gNumActiveShadows.w; ++i)
 	{
+#ifdef SHADOW_MAPPED
 		shadowFactors[i] = CalcShadowFactor(gShadowMap[i], gsamShadowBorder, pin.ShadowPosH[i]);
-	}
+#else
+		shadowFactors[i] = 0.0f;
 #endif
+	}
+
 	const float shininess = (1.0f - gRoughness);
     Material mat = { diffuseAlbedo /*gDiffuseAlbedo*/, gFresnelR0, shininess };
     float4 directLight = ComputeLighting(gLights, mat, pin.PosW, 
@@ -247,14 +251,18 @@ float4 PS_NormalMapped(VertexOut pin) : SV_Target
 	float4 ambient = gAmbientLight * diffuseAlbedo;// gDiffuseAlbedo;
 
 	float shadowFactors[MAX_SHADOW_COUNT];
-#ifdef SHADOW_MAPPED
+
 	// Only the first light casts a shadow.
 	[loop]
 	for (int i = 0; i < gNumActiveShadows.w; ++i)
 	{
+#ifdef SHADOW_MAPPED
 		shadowFactors[i] = CalcShadowFactor(gShadowMap[i], gsamShadowBorder, pin.ShadowPosH[i]);
-	}
+#else
+		shadowFactors[i] = 0.0f;
 #endif
+	}
+
 	// Shininess is stored at a per-pixel level in the normal map alpha channel.
 	const float shininess = (1.0f - gRoughness) * normalMapSample.a;
 	Material mat = { diffuseAlbedo /*gDiffuseAlbedo*/, gFresnelR0, shininess };
@@ -268,8 +276,9 @@ float4 PS_NormalMapped(VertexOut pin) : SV_Target
 
 	return litColor;
 	// TODO: Remove these or place into a debugging shader
-	//return gShadowMap.SampleCmpLevelZero(gsamShadowBorder, pin.ShadowPosH.xy, pin.ShadowPosH.z);
-	//return float4(gShadowMap.Sample(gsamLinearWrap, pin.ShadowPosH.xy).rrr, 1.0f);
+	//pin.ShadowPosH[0].xyz /= pin.ShadowPosH[0].w;
+	//return gShadowMap[0].SampleCmpLevelZero(gsamShadowBorder, pin.ShadowPosH[0].xy, pin.ShadowPosH[0].z);
+	//return float4(gShadowMap[0].Sample(gsamLinearWrap, pin.ShadowPosH[0].xy).rrr, 1.0f);
 }
 
 // Sky mapping shaders

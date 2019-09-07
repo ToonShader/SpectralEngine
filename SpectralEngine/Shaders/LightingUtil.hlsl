@@ -115,7 +115,7 @@ float3 ComputeSpotLight(Light L, Material mat, float3 pos, float3 normal, float3
 
     // Range test.
     if(d > L.FalloffEnd)
-        return 0.0f;
+        return float3(0.0f, 0.0f, 0.0f);
 
     // Normalize the light vector.
     lightVec /= d;

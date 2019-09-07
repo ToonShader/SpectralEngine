@@ -108,7 +108,7 @@ struct PassConstants
 	DirectX::XMFLOAT4X4 ViewProj = Spectral::Math::XMF4x4Identity();
 	DirectX::XMFLOAT4X4 InvViewProj = Spectral::Math::XMF4x4Identity();
 	DirectX::XMFLOAT4X4 ShadowTransform[MAX_SHADOW_COUNT] = {};
-	DirectX::XMINT4 NumActiveShadows = { 0.0f, 0.0f, 0.0f, 0.0f };
+	DirectX::XMINT4 NumActiveShadows = { 0, 0, 0, 0 };
 	DirectX::XMFLOAT3 EyePosW = { 0.0f, 0.0f, 0.0f };
 	float cbPad1 = 0.0f;
 	DirectX::XMFLOAT2 RenderTargetSize = { 0.0f, 0.0f };
